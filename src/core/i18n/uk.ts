@@ -1,4 +1,4 @@
-﻿export const uk = {
+export const uk = {
   common: {
     cancel: 'Скасувати',
     save: 'Зберегти',
@@ -94,7 +94,16 @@
     folderLoaded: 'Папку завантажено та структуру перебудовано.',
     scanCancelled: 'Сканування директорії було перервано.',
     alreadyLoading: 'Процес завантаження вже триває.',
-    noPermission: 'Немає доступу до директорії.'
+    noPermission: 'Немає доступу до директорії.',
+    resyncWorkspace: 'Повторна синхронізація',
+    resyncWorkspaceTooltip: 'Перечитати директорію з диска зі збереженням усіх налаштувань та вибору',
+    resyncFolder: 'Синхронізувати цю папку',
+    resyncFolderTooltip: 'Пересканувати лише цю папку та її підпапки',
+    resyncing: 'Синхронізація...',
+    resyncSuccess: 'Синхронізовано: {{added}} додано, {{updated}} змінено, {{deleted}} видалено.',
+    resyncNoChanges: 'Змін на диску не виявлено.',
+    resyncError: 'Не вдалося виконати синхронізацію з диска.',
+    noDirectoryLoaded: 'Директорію не завантажено.'
   },
   settings: {
     title: 'Розширені налаштування',
@@ -180,7 +189,7 @@
     showGloballyIgnored: 'Показати глобально ігноровані',
     showLocallyIgnored: 'Показати локально ігноровані',
     showEmptyFolders: 'Показати порожні папки',
-    generateStructure: 'Генерувати структуру файлів',
+    generateTree: 'Генерувати структуру файлів',
     structureIncludeIgnored: 'Структура: включати ігноровані',
     enableCSharpAnalysis: 'C# Мета-аналіз',
     tokenWarningTitle: 'Знайдено великий проект',

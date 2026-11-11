@@ -1,5 +1,5 @@
-﻿import type { 
-  FileNode, GeneratorStats, Profile, GlobalSettings, LocalFilters 
+import type { 
+  FileNode, GeneratorStats, Profile, GlobalSettings, LocalFilters, SubtreeSyncResult 
 } from '@/core/types/file.types';
 import type { OptimizationRule } from '@/core/types/optimization.types';
 
@@ -17,6 +17,7 @@ export interface FolderStat {
 export interface DirectorySlice {
   nodes: FileNode[];
   isLoading: boolean;
+  isResyncing: boolean;
   scannedFilesCount: number;
   rootHandle: FileSystemDirectoryHandle | null;
   sourceMode: 'browser-fs' | 'ide-sync';
@@ -38,6 +39,8 @@ export interface DirectorySlice {
   loadDirectoryFromHandle: (handle: FileSystemDirectoryHandle, applyProfile?: Profile, isRestored?: boolean) => Promise<void>;
   loadFromIdeSync: (port: string, token: string) => Promise<void>;
   cancelDirectoryLoad: () => void;
+  resyncWorkspace: () => Promise<SubtreeSyncResult>;
+  resyncSubtree: (targetNodeId: string) => Promise<SubtreeSyncResult>;
 }
 
 export interface SettingsSlice {
@@ -79,6 +82,7 @@ export interface TokenizationSlice {
   runTokenization: (force: boolean) => void;
   cancelTokenization: () => void;
   invalidateTokens: () => void;
+  pruneAndInvalidateTokens: (deletedNodeIds: Set<string>, dirtyNodeIds: Set<string>) => void;
 }
 
 export interface ProfilesSlice {

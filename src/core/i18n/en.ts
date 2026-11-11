@@ -1,4 +1,4 @@
-﻿export const en = {
+export const en = {
   common: {
     cancel: 'Cancel',
     save: 'Save',
@@ -94,7 +94,16 @@
     folderLoaded: 'Folder successfully loaded and tree rebuilt.',
     scanCancelled: 'Directory scan was interrupted.',
     alreadyLoading: 'Loading process is already in progress.',
-    noPermission: 'No permission to access the directory.'
+    noPermission: 'No permission to access the directory.',
+    resyncWorkspace: 'Resynchronize Directory',
+    resyncWorkspaceTooltip: 'Re-read workspace from disk while preserving all settings and selections',
+    resyncFolder: 'Resync This Folder',
+    resyncFolderTooltip: 'Re-scan only this directory and its subfolders',
+    resyncing: 'Resynchronizing...',
+    resyncSuccess: 'Synchronized: {{added}} added, {{updated}} modified, {{deleted}} removed.',
+    resyncNoChanges: 'Directory is already up to date.',
+    resyncError: 'Failed to resynchronize directory from disk.',
+    noDirectoryLoaded: 'No directory is currently loaded.'
   },
   settings: {
     title: 'Advanced Settings',
@@ -180,7 +189,7 @@
     showGloballyIgnored: 'Show globally ignored',
     showLocallyIgnored: 'Show locally ignored',
     showEmptyFolders: 'Show empty folders',
-    generateStructure: 'Generate file structure',
+    generateTree: 'Generate file structure',
     structureIncludeIgnored: 'Structure: include ignored',
     enableCSharpAnalysis: 'C# Meta Analysis',
     tokenWarningTitle: 'Large Project Detected',

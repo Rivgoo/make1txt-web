@@ -16,6 +16,29 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
     set({ realTokenMap: {}, optimizedBytesMap: {}, needsManualTokenization: false });
   },
 
+  pruneAndInvalidateTokens: (deletedNodeIds, dirtyNodeIds) => {
+    if (deletedNodeIds.size === 0 && dirtyNodeIds.size === 0) return;
+    set((state) => {
+      const nextTokenMap = { ...state.realTokenMap };
+      const nextOptBytesMap = { ...state.optimizedBytesMap };
+
+      for (const id of deletedNodeIds) {
+        delete nextTokenMap[id];
+        delete nextOptBytesMap[id];
+      }
+
+      for (const id of dirtyNodeIds) {
+        delete nextTokenMap[id];
+        delete nextOptBytesMap[id];
+      }
+
+      return {
+        realTokenMap: nextTokenMap,
+        optimizedBytesMap: nextOptBytesMap,
+      };
+    });
+  },
+
   evaluateTokenization: () => {
     const { nodes, isTokenizing, localFilters, optimizedBytesMap } = get();
     if (isTokenizing) return;
@@ -53,7 +76,6 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
 
     const skipTiktoken = !force && needsManualTokenization;
 
-    // ВИПРАВЛЕНО: Додано content та sizeBytes до payload
     const filesToTokenize = nodes
       .filter(n => !n.isDirectory && n.isSelected && !n.isIgnored && 
         (realTokenMap[n.id] === undefined || optimizedBytesMap[n.id] === undefined))

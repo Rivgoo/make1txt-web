@@ -1,4 +1,4 @@
-﻿import type { OptimizationRule } from './optimization.types';
+import type { OptimizationRule } from './optimization.types';
 
 export interface FileSystemHandle {
   readonly kind: 'file' | 'directory';
@@ -116,4 +116,28 @@ export interface Profile {
   directoryName?: string;
   settings: GlobalSettings;
   localFilters: SavedLocalFilters;
+}
+
+export interface SubtreeSyncResult {
+  addedCount: number;
+  updatedCount: number;
+  deletedCount: number;
+  affectedBytes: number;
+}
+
+export interface ReconcileOptions {
+  oldNodes: FileNode[];
+  newScannedNodes: FileNode[];
+  targetSubtreeRootPath?: string;
+  globalSettings: GlobalSettings;
+  localFilters: LocalFilters;
+  gitignoreRegexes: RegExp[];
+  compiledCustomRegexes: RegExp[];
+}
+
+export interface ReconciledTreeOutput {
+  reconciledNodes: FileNode[];
+  dirtyNodeIds: Set<string>;
+  deletedNodeIds: Set<string>;
+  stats: SubtreeSyncResult;
 }

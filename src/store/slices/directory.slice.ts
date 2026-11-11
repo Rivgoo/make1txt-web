@@ -1,4 +1,4 @@
-﻿import type { StateCreator } from 'zustand';
+import type { StateCreator } from 'zustand';
 import type { FileStore, DirectorySlice } from '../store.types';
 import type { FileNode, LocalFilters } from '@/core/types/file.types';
 import { requestDirectoryAccess, readDirectoryRecursively, verifyDirectoryPermission } from '@/core/services/FileSystemService';
@@ -9,10 +9,12 @@ import { saveGlobalSettings } from '../helpers/settings.helper';
 import { PREDEFINED_OPTIMIZATION_RULES } from '@/core/constants/optimization.constants';
 import { DEFAULT_GLOBAL_SETTINGS } from '../constants';
 import { IdeSyncService } from '@/core/services/IdeSyncService';
+import { reconcileFileTree } from '@/core/utils/reconcile.utils';
 
 export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlice> = (set, get) => ({
   nodes: [],
   isLoading: false,
+  isResyncing: false,
   scannedFilesCount: 0,
   rootHandle: null,
   sourceMode: 'browser-fs',
@@ -34,6 +36,211 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
   cancelDirectoryLoad: () => {
     get().abortController?.abort();
     set({ isLoading: false, abortController: null, scannedFilesCount: 0 });
+  },
+
+  resyncWorkspace: async () => {
+    const { rootHandle, isLoading, isResyncing, globalSettings, cancelTokenization, nodes } = get();
+    if (isLoading || isResyncing) throw new Error('ALREADY_LOADING');
+    if (!rootHandle) throw new Error('NO_DIRECTORY_LOADED');
+
+    cancelTokenization();
+    set({ isResyncing: true });
+
+    try {
+      const hasPermission = await verifyDirectoryPermission(rootHandle);
+      if (!hasPermission) throw new Error('NO_PERMISSION');
+
+      let gitRegexes: RegExp[] = [];
+      if (globalSettings.useGitignore) {
+        try {
+          const gitignoreHandle = await rootHandle.getFileHandle('.gitignore');
+          const file = await gitignoreHandle.getFile();
+          gitRegexes = createIgnoreRegexes(await file.text());
+        } catch {
+          // Ігноруємо, якщо .gitignore відсутній
+        }
+      }
+
+      const skipPredicate = globalSettings.pruneIgnoredOnRead
+        ? (name: string, relativePath: string, isDirectory: boolean) => {
+            if (isPathGloballyIgnored(relativePath, globalSettings.ignoredPaths)) return true;
+            if (!isDirectory && globalSettings.ignoredExtensions.includes(getFileExtension(name))) return true;
+            if (gitRegexes.some(rx => rx.test(relativePath))) return true;
+            return false;
+          }
+        : undefined;
+
+      // Надійно знаходимо корінь з глибиною 0
+      const existingRoot = nodes.find(n => n.depth === 0) || nodes[0];
+      const rootId = existingRoot ? existingRoot.id : crypto.randomUUID();
+      const rootNode: FileNode = {
+        id: rootId,
+        name: rootHandle.name,
+        relativePath: rootHandle.name,
+        isDirectory: true,
+        sizeBytes: 0,
+        handle: rootHandle,
+        depth: 0,
+        parentId: null,
+        isSelected: existingRoot ? existingRoot.isSelected : true,
+        isIgnored: false,
+        isGloballyIgnored: false,
+        isLocallyIgnored: false,
+        isExpanded: existingRoot ? existingRoot.isExpanded : true,
+      };
+
+      const rawChildren = await readDirectoryRecursively(
+        rootHandle,
+        undefined,
+        undefined,
+        skipPredicate,
+        { count: 0 },
+        rootHandle.name,
+        1,
+        rootId
+      );
+
+      const freshlyScannedNodes = [rootNode, ...rawChildren];
+
+      const { reconciledNodes, dirtyNodeIds, deletedNodeIds, stats } = reconcileFileTree({
+        oldNodes: get().nodes,
+        newScannedNodes: freshlyScannedNodes,
+        globalSettings,
+        localFilters: get().localFilters,
+        gitignoreRegexes: gitRegexes,
+        compiledCustomRegexes: get().compiledCustomRegexes
+      });
+
+      get().pruneAndInvalidateTokens(deletedNodeIds, dirtyNodeIds);
+
+      // Обробка активного вікна попереднього перегляду, якщо файл було видалено або змінено
+      const currentPreview = get().previewNode;
+      if (currentPreview) {
+        if (deletedNodeIds.has(currentPreview.id)) {
+          set({ previewNode: null });
+        } else {
+          const updatedPreview = reconciledNodes.find(n => n.id === currentPreview.id);
+          if (updatedPreview) set({ previewNode: updatedPreview });
+        }
+      }
+
+      const extMap = buildExtMap(reconciledNodes, globalSettings, get().localFilters.extensions);
+
+      const hasCsFiles = reconciledNodes.some(n => !n.isDirectory && n.name.toLowerCase().endsWith('.cs'));
+      const currentCsChoice = get().localFilters?.enableCSharpAnalysis ?? true;
+      const finalEnableCSharp = hasCsFiles ? currentCsChoice : false;
+
+      const nextState = {
+        ...get(),
+        nodes: reconciledNodes,
+        gitignoreRegexes: gitRegexes,
+        localFilters: {
+          ...get().localFilters,
+          extensions: extMap,
+          enableCSharpAnalysis: finalEnableCSharp
+        },
+        isResyncing: false,
+      };
+
+      set({ ...nextState, ...recompileAndRecalculate(nextState) });
+      get().evaluateTokenization();
+
+      return stats;
+    } catch (error) {
+      set({ isResyncing: false });
+      throw error;
+    }
+  },
+
+  resyncSubtree: async (targetNodeId: string) => {
+    const { nodes, isLoading, isResyncing, globalSettings, cancelTokenization } = get();
+    if (isLoading || isResyncing) throw new Error('ALREADY_LOADING');
+
+    const targetNode = nodes.find(n => n.id === targetNodeId);
+    if (!targetNode || !targetNode.isDirectory || !targetNode.handle) {
+      throw new Error('INVALID_TARGET_NODE');
+    }
+
+    cancelTokenization();
+    set({ isResyncing: true });
+
+    try {
+      const dirHandle = targetNode.handle as FileSystemDirectoryHandle;
+      const hasPermission = await verifyDirectoryPermission(dirHandle);
+      if (!hasPermission) throw new Error('NO_PERMISSION');
+
+      const skipPredicate = globalSettings.pruneIgnoredOnRead
+        ? (name: string, relativePath: string, isDirectory: boolean) => {
+            if (isPathGloballyIgnored(relativePath, globalSettings.ignoredPaths)) return true;
+            if (!isDirectory && globalSettings.ignoredExtensions.includes(getFileExtension(name))) return true;
+            if (get().gitignoreRegexes.some(rx => rx.test(relativePath))) return true;
+            return false;
+          }
+        : undefined;
+
+      const rawChildren = await readDirectoryRecursively(
+        dirHandle,
+        undefined,
+        undefined,
+        skipPredicate,
+        { count: 0 },
+        targetNode.relativePath,
+        targetNode.depth + 1,
+        targetNode.id
+      );
+
+      const freshlyScannedSubtree: FileNode[] = [
+        { ...targetNode, handle: dirHandle },
+        ...rawChildren
+      ];
+
+      const { reconciledNodes, dirtyNodeIds, deletedNodeIds, stats } = reconcileFileTree({
+        oldNodes: get().nodes,
+        newScannedNodes: freshlyScannedSubtree,
+        targetSubtreeRootPath: targetNode.relativePath,
+        globalSettings,
+        localFilters: get().localFilters,
+        gitignoreRegexes: get().gitignoreRegexes,
+        compiledCustomRegexes: get().compiledCustomRegexes
+      });
+
+      get().pruneAndInvalidateTokens(deletedNodeIds, dirtyNodeIds);
+
+      const currentPreview = get().previewNode;
+      if (currentPreview) {
+        if (deletedNodeIds.has(currentPreview.id)) {
+          set({ previewNode: null });
+        } else {
+          const updatedPreview = reconciledNodes.find(n => n.id === currentPreview.id);
+          if (updatedPreview) set({ previewNode: updatedPreview });
+        }
+      }
+
+      const extMap = buildExtMap(reconciledNodes, globalSettings, get().localFilters.extensions);
+
+      const hasCsFiles = reconciledNodes.some(n => !n.isDirectory && n.name.toLowerCase().endsWith('.cs'));
+      const currentCsChoice = get().localFilters?.enableCSharpAnalysis ?? true;
+      const finalEnableCSharp = hasCsFiles ? currentCsChoice : false;
+
+      const nextState = {
+        ...get(),
+        nodes: reconciledNodes,
+        localFilters: {
+          ...get().localFilters,
+          extensions: extMap,
+          enableCSharpAnalysis: finalEnableCSharp
+        },
+        isResyncing: false,
+      };
+
+      set({ ...nextState, ...recompileAndRecalculate(nextState) });
+      get().evaluateTokenization();
+
+      return stats;
+    } catch (error) {
+      set({ isResyncing: false });
+      throw error;
+    }
   },
 
   loadFromIdeSync: async (port: string, token: string) => {
@@ -144,7 +351,7 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       const initialState = { 
         ...get(),
         syncProjectName: projectName || 'project',
-        gitignoreRegexes: [], // Відфільтровано IDE
+        gitignoreRegexes: [],
         isRestoredFromProfile: false,
         localFilters: {
           ...get().localFilters,
@@ -208,7 +415,7 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
           const file = await gitignoreHandle.getFile();
           gitRegexes = createIgnoreRegexes(await file.text());
         } catch {
-          // Ignored if file does not exist
+          // Ігноруємо, якщо .gitignore відсутній
         }
       }
 

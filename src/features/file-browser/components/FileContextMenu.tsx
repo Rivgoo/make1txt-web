@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   IconFolder, IconFileText, IconCircleCheck, IconCircleDashed, 
   IconWeight, IconClock, IconRoute, IconFiles, IconLoader2, IconX, 
-  IconEye, IconEyeOff, IconWorld, IconMapPin, IconMapPinOff, IconCopy, IconCpu, IconWand
+  IconEye, IconEyeOff, IconWorld, IconMapPin, IconMapPinOff, IconCopy, IconCpu, IconWand, IconRefresh
 } from '@tabler/icons-react';
 import type { FileNode } from '@/core/types/file.types';
 import type { FolderStat } from '@/store/useFileStore';
@@ -29,7 +29,8 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
   const { t } = useTranslation();
   const { 
     toggleSelection, nodes, previewNode, setPreviewNode, globalSettings, updateGlobalSettings, 
-    localFilters, toggleExtension, toggleLocalPathIgnore, realTokenMap, optimizedBytesMap
+    localFilters, toggleExtension, toggleLocalPathIgnore, realTokenMap, optimizedBytesMap,
+    resyncSubtree, isResyncing
   } = useFileStore();
   
   const { showToast } = useToast();
@@ -105,6 +106,37 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
       showToast('error', t('common.error'), t('browser.pathCopyFailed'));
     });
     onClose();
+  };
+
+  const handleResyncFolder = async () => {
+    onClose();
+    try {
+      const stats = await resyncSubtree(node.id);
+      const totalChanges = stats.addedCount + stats.updatedCount + stats.deletedCount;
+      if (totalChanges > 0) {
+        showToast(
+          'success',
+          t('common.success'),
+          t('browser.resyncSuccess', {
+            added: stats.addedCount,
+            updated: stats.updatedCount,
+            deleted: stats.deletedCount,
+          })
+        );
+      } else {
+        showToast('info', t('common.info'), t('browser.resyncNoChanges'));
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'ALREADY_LOADING') {
+          showToast('warning', t('common.wait'), t('browser.alreadyLoading'));
+        } else if (error.message === 'NO_PERMISSION') {
+          showToast('error', t('common.error'), t('browser.noPermission'));
+        } else {
+          showToast('error', t('common.error'), error.message || t('browser.resyncError'));
+        }
+      }
+    }
   };
 
   const handleToggleSelection = () => {
@@ -184,6 +216,17 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
         <div className="context-menu-layout">
           <div className="context-menu-actions-col">
             <div className="context-menu-section-title">{t('browser.actions')}</div>
+
+            {node.isDirectory && (
+              <button 
+                className="context-menu-action" 
+                onClick={handleResyncFolder}
+                disabled={isResyncing}
+              >
+                <IconRefresh size={18} className={isResyncing ? 'spin' : ''} />
+                {t('browser.resyncFolder')}
+              </button>
+            )}
             
             {!node.isDirectory && (
               <button className="context-menu-action" onClick={handleTogglePreview}>

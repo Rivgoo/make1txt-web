@@ -88,11 +88,21 @@
 
 .browser-header-tools {
   display: flex;
+  align-items: center;
   gap: var(--spacing-xs);
 }
 
 .browser-header-tools .btn {
   padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.browser-tools-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+  align-self: center;
+  flex-shrink: 0;
 }
 
 .browser-title {

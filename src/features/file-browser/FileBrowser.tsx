@@ -5,7 +5,7 @@ import {
   IconListTree, IconCode, IconChecks, IconSquareX, IconFiles, 
   IconSquareRoundedX, IconArrowsSort, IconAbc, IconWeight, 
   IconCpu, IconBan, IconSortAscendingLetters, IconSortDescendingLetters, 
-  IconCodeAsterix, IconFilter, IconFolders, IconBrandGithub
+  IconCodeAsterix, IconFilter, IconFolders, IconBrandGithub, IconRefresh
 } from '@tabler/icons-react';
 import { Button } from '@/shared/ui/Button/Button';
 import { VirtualList } from '@/shared/ui/VirtualList/VirtualList';
@@ -50,7 +50,7 @@ export function FileBrowser() {
   const isResizingRef = useRef(false);
 
   const { 
-    nodes, isLoading, scannedFilesCount, loadDirectory, cancelDirectoryLoad, toggleExpand, toggleSelection, 
+    nodes, isLoading, isResyncing, scannedFilesCount, loadDirectory, resyncWorkspace, cancelDirectoryLoad, toggleExpand, toggleSelection, 
     activeTab, setActiveTab, generatedText, selectAll, deselectAll, previewNode, setPreviewNode, localFilters,
     realTokenMap, optimizedBytesMap
   } = useFileStore();
@@ -115,6 +115,38 @@ export function FileBrowser() {
           showToast('error', t('common.error'), t('browser.noPermission'));
         } else {
           showToast('error', t('common.error'), error.message);
+        }
+      }
+    }
+  };
+
+  const handleResyncWorkspace = async () => {
+    try {
+      const stats = await resyncWorkspace();
+      const totalChanges = stats.addedCount + stats.updatedCount + stats.deletedCount;
+      if (totalChanges > 0) {
+        showToast(
+          'success',
+          t('common.success'),
+          t('browser.resyncSuccess', {
+            added: stats.addedCount,
+            updated: stats.updatedCount,
+            deleted: stats.deletedCount,
+          })
+        );
+      } else {
+        showToast('info', t('common.info'), t('browser.resyncNoChanges'));
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'ALREADY_LOADING') {
+          showToast('warning', t('common.wait'), t('browser.alreadyLoading'));
+        } else if (error.message === 'NO_PERMISSION') {
+          showToast('error', t('common.error'), t('browser.noPermission'));
+        } else if (error.message === 'NO_DIRECTORY_LOADED') {
+          showToast('warning', t('common.warning'), t('browser.noDirectoryLoaded'));
+        } else {
+          showToast('error', t('common.error'), error.message || t('browser.resyncError'));
         }
       }
     }
@@ -400,7 +432,24 @@ export function FileBrowser() {
                   <Button variant="secondary" onClick={deselectAll} data-tooltip={t('browser.resetSelection')} data-tooltip-pos="bottom">
                     <IconSquareX size={18} />
                   </Button>
-                  <Button variant="secondary" onClick={handleSelectFolder} disabled={isLoading} data-tooltip={t('browser.changeFolder')} data-tooltip-pos="bottom">
+
+                  <div className="browser-tools-divider" />
+
+                  <Button 
+                    variant="secondary" 
+                    onClick={handleResyncWorkspace} 
+                    disabled={isLoading || isResyncing} 
+                    data-tooltip={t('browser.resyncWorkspaceTooltip')} 
+                    data-tooltip-pos="bottom"
+                  >
+                    <IconRefresh 
+                      size={18} 
+                      className={isResyncing ? 'spin' : ''} 
+                      color={isResyncing ? 'var(--accent-primary)' : 'var(--text-primary)'} 
+                    />
+                  </Button>
+
+                  <Button variant="secondary" onClick={handleSelectFolder} disabled={isLoading || isResyncing} data-tooltip={t('browser.changeFolder')} data-tooltip-pos="bottom">
                     {isLoading ? <IconLoader2 className="spin" size={18} /> : <IconFolderOpen size={18} />}
                   </Button>
                 </div>
@@ -472,7 +521,7 @@ export function FileBrowser() {
                 <IconFolderOpen size={64} stroke={1} color="var(--accent-primary)" />
                 <h3>{t('browser.emptyStructureTitle')}</h3>
                 <p>{t('browser.emptyStructureDesc')}</p>
-                <Button variant="primary" onClick={handleSelectFolder} disabled={isLoading}>
+                <Button variant="primary" onClick={handleSelectFolder} disabled={isLoading || isResyncing}>
                   {isLoading ? <IconLoader2 className="spin" size={18} /> : <IconFolderOpen size={18} />}
                   {t('browser.selectFolder')}
                 </Button>
