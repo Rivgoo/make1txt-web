@@ -76,6 +76,8 @@ export const en = {
     copyPath: 'Copy Relative Path',
     select: 'Select',
     deselect: 'Deselect',
+    selectFirstLevel: 'Select All (1st Level)',
+    deselectFirstLevel: 'Deselect All (1st Level)',
     localFilters: 'Local Filters (Session)',
     ignoreFolder: 'Ignore Folder',
     unignoreFolder: 'Stop Ignoring Folder',

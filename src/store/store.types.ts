@@ -64,6 +64,7 @@ export interface FiltersSlice {
 
 export interface SelectionSlice {
   toggleSelection: (id: string, checked: boolean) => void;
+  setDirectChildrenSelection: (folderId: string, checked: boolean) => void;
   toggleExpand: (id: string) => void;
   selectAll: () => void;
   deselectAll: () => void;

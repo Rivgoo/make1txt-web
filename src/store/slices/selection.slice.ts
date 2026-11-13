@@ -23,6 +23,39 @@ export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlic
     get().evaluateTokenization();
   },
 
+  setDirectChildrenSelection: (folderId, checked) => {
+    set((state) => {
+      const target = state.nodes.find(n => n.id === folderId);
+      if (!target || !target.isDirectory || target.isIgnored) return state;
+
+      const pathPrefix = `${target.relativePath}/`;
+
+      const updatedDirectChildren = state.nodes.map(node => {
+        if (node.parentId === folderId && !node.isDirectory && !node.isIgnored) {
+          return { ...node, isSelected: checked };
+        }
+        return node;
+      });
+
+      const hasAnySelectedDescendant = updatedDirectChildren.some(
+        node => !node.isDirectory && !node.isIgnored && node.isSelected && node.relativePath.startsWith(pathPrefix)
+      );
+
+      const newNodes = updatedDirectChildren.map(node => {
+        if (node.id === folderId) {
+          return { ...node, isSelected: checked ? true : hasAnySelectedDescendant };
+        }
+        if (checked && node.isDirectory && !node.isIgnored && target.relativePath.startsWith(`${node.relativePath}/`)) {
+          return { ...node, isSelected: true };
+        }
+        return node;
+      });
+
+      return { nodes: newNodes };
+    });
+    get().evaluateTokenization();
+  },
+
   toggleExpand: (id) => {
     set((state) => ({
       nodes: state.nodes.map(node => node.id === id ? { ...node, isExpanded: !node.isExpanded } : node)

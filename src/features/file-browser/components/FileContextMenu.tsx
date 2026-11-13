@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { 
   IconFolder, IconFileText, IconCircleCheck, IconCircleDashed, 
   IconWeight, IconClock, IconRoute, IconFiles, IconLoader2, IconX, 
-  IconEye, IconEyeOff, IconWorld, IconMapPin, IconMapPinOff, IconCopy, IconCpu, IconWand, IconRefresh
+  IconEye, IconEyeOff, IconWorld, IconMapPin, IconMapPinOff, IconCopy, IconCpu, IconWand, IconRefresh,
+  IconChecks, IconSquareX
 } from '@tabler/icons-react';
 import type { FileNode } from '@/core/types/file.types';
 import type { FolderStat } from '@/store/useFileStore';
@@ -28,7 +29,7 @@ interface MetaData {
 export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContextMenuProps) {
   const { t } = useTranslation();
   const { 
-    toggleSelection, nodes, previewNode, setPreviewNode, globalSettings, updateGlobalSettings, 
+    toggleSelection, setDirectChildrenSelection, nodes, previewNode, setPreviewNode, globalSettings, updateGlobalSettings, 
     localFilters, toggleExtension, toggleLocalPathIgnore, realTokenMap, optimizedBytesMap,
     resyncSubtree, isResyncing
   } = useFileStore();
@@ -47,6 +48,12 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
   const localPatternCheck = node.relativePath;
   const isLocallyIgnored = localFilters?.customPatterns?.some(p => p.pattern === localPatternCheck && p.isActive);
   const isPreviewing = previewNode?.id === node.id;
+
+  const directFiles = node.isDirectory
+    ? nodes.filter(n => n.parentId === node.id && !n.isDirectory && !n.isIgnored)
+    : [];
+  const allDirectSelected = directFiles.length > 0 && directFiles.every(f => f.isSelected);
+  const noneDirectSelected = directFiles.length > 0 && directFiles.every(f => !f.isSelected);
 
   useLayoutEffect(() => {
     if (!menuRef.current) return;
@@ -141,6 +148,16 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
 
   const handleToggleSelection = () => {
     toggleSelection(node.id, !node.isSelected);
+    onClose();
+  };
+
+  const handleSelectFirstLevel = () => {
+    setDirectChildrenSelection(node.id, true);
+    onClose();
+  };
+
+  const handleDeselectFirstLevel = () => {
+    setDirectChildrenSelection(node.id, false);
     onClose();
   };
 
@@ -247,6 +264,27 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
                 {node.isSelected ? <IconCircleDashed size={18} /> : <IconCircleCheck size={18} />}
                 {node.isSelected ? t('browser.deselect') : t('browser.select')}
               </button>
+            )}
+
+            {node.isDirectory && !node.isIgnored && (
+              <>
+                <button
+                  className="context-menu-action action-include"
+                  onClick={handleSelectFirstLevel}
+                  disabled={directFiles.length === 0 || allDirectSelected}
+                >
+                  <IconChecks size={18} />
+                  {t('browser.selectFirstLevel')}
+                </button>
+                <button
+                  className="context-menu-action action-exclude"
+                  onClick={handleDeselectFirstLevel}
+                  disabled={directFiles.length === 0 || noneDirectSelected}
+                >
+                  <IconSquareX size={18} />
+                  {t('browser.deselectFirstLevel')}
+                </button>
+              </>
             )}
 
             <div className="context-menu-divider" />

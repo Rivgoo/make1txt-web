@@ -76,6 +76,8 @@ export const uk = {
     copyPath: 'Скопіювати відносний шлях',
     select: 'Виділити',
     deselect: 'Зняти виділення',
+    selectFirstLevel: 'Вибрати все (1-й рівень)',
+    deselectFirstLevel: 'Зняти вибір з усього (1-й рівень)',
     localFilters: 'Локальні фільтри (сеанс)',
     ignoreFolder: 'Ігнорувати папку',
     unignoreFolder: 'Повернути папку',

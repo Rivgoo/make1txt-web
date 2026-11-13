@@ -122,6 +122,11 @@
   text-align: left;
 }
 
+.context-menu-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .context-menu-action:hover:not(:disabled) {
   background-color: var(--bg-surface);
 }
