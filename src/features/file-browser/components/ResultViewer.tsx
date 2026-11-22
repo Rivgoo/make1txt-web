@@ -146,9 +146,13 @@ export function ResultViewer() {
     }
   };
 
+  const stats = useFileStore((s) => s.getStats)();
   const sizeEstimateBytes = generatedText ? new Blob([generatedText]).size : 0;
   const wordCount = generatedText ? countWords(generatedText) : 0;
-  const tokenCount = estimateTokenCount(sizeEstimateBytes);
+  const tokenCount = stats.isExactTokens && stats.tokens > 0
+    ? stats.tokens
+    : estimateTokenCount(sizeEstimateBytes);
+  const totalSavedTok = stats.optimizationSavedTokens + stats.structureOnlySavedTokens;
 
   return (
     <div className="result-wrapper">
@@ -212,8 +216,18 @@ export function ResultViewer() {
                 </div>
                 <div className="export-stat-card">
                   <span className="export-stat-label"><IconCpu size={14} /> {t('stats.tokens')}</span>
-                  <span className="export-stat-value accent">~{tokenCount.toLocaleString()}</span>
+                  <span className="export-stat-value accent">
+                    {!(stats.isExactTokens && stats.tokens > 0) && '~'}{tokenCount.toLocaleString()}
+                  </span>
                 </div>
+                {totalSavedTok > 0 && (
+                  <div className="export-stat-card">
+                    <span className="export-stat-label">{t('optimization.tokensSaved')}</span>
+                    <span className="export-stat-value" style={{ color: 'var(--success)' }}>
+                      -{totalSavedTok.toLocaleString()}
+                    </span>
+                  </div>
+                )}
                 <div className="export-stat-card">
                   <span className="export-stat-label"><IconLetterCase size={14} /> {t('stats.words')}</span>
                   <span className="export-stat-value">{wordCount.toLocaleString()}</span>

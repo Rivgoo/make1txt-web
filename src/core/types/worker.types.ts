@@ -1,11 +1,16 @@
 ﻿import type { OptimizationRule } from './optimization.types';
 import type { OutputMode } from './file.types';
+import type {
+  CSharpCompressionLevel,
+  CSharpCompressionOptions,
+} from './csharp-compression.types';
 
 export interface GeneratorFileItem {
   handle: FileSystemFileHandle | null;
   path: string;
   content?: string;
   outputMode: OutputMode;
+  csharpCompressionLevel: CSharpCompressionLevel;
 }
 
 export interface WorkerInput {
@@ -14,6 +19,8 @@ export interface WorkerInput {
   maxFileSizeBytes: number;
   isOptimizationEnabled?: boolean;
   optimizationRules?: OptimizationRule[];
+  isCSharpCompressionEnabled?: boolean;
+  csharpCompressionOptions?: CSharpCompressionOptions;
   enableCSharpAnalysis?: boolean;
 }
 
@@ -35,9 +42,12 @@ export interface OptimizedFileMetrics {
 
 export interface TokenizerFileItem {
   id: string;
+  path: string;
   handle: FileSystemFileHandle | null;
   content?: string;
   sizeBytes: number;
+  effectiveConfigHash: string;
+  csharpCompressionLevel: CSharpCompressionLevel;
   needsBaseBytes: boolean;
   needsBaseTokens: boolean;
   needsOptBytes: boolean;
@@ -46,13 +56,15 @@ export interface TokenizerFileItem {
 
 export interface TokenizerInput {
   runId: number;
-  configHash: string;
   files: TokenizerFileItem[];
   isOptimizationEnabled: boolean;
   optimizationRules: OptimizationRule[];
+  isCSharpCompressionEnabled: boolean;
+  csharpCompressionOptions: CSharpCompressionOptions;
 }
 
 export interface TokenizerFileResult {
+  configHash: string;
   baseBytes?: number;
   baseExactTokens?: number | null;
   optBytes?: number;

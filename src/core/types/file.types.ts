@@ -1,4 +1,9 @@
 import type { OptimizationRule } from './optimization.types';
+import type {
+  CSharpCompressionLevel,
+  CSharpCompressionOptions,
+  HierarchicalOverrideSource,
+} from './csharp-compression.types';
 
 export interface FileSystemHandle {
   readonly kind: 'file' | 'directory';
@@ -26,6 +31,9 @@ export interface FileNode {
   outputMode: OutputMode;
   outputModeSource: OutputModeSource;
   outputModeAnchorPath: string | null;
+  csharpCompressionLevel: CSharpCompressionLevel;
+  csharpCompressionSource: HierarchicalOverrideSource;
+  csharpCompressionAnchorPath: string | null;
 }
 
 export interface IdeSyncPayload {
@@ -51,6 +59,9 @@ export interface GeneratorStats {
   structureOnlySavedTokens: number;
   isExactTokens: boolean;
   isBaseExactTokens: boolean;
+  optimizationSavedTokens: number;
+  compressedCSharpFiles: number;
+  csharpLevelCounts: Record<CSharpCompressionLevel, number>;
 }
 
 export interface TreeSymbols {
@@ -105,6 +116,10 @@ export interface LocalFilters {
   isOptimizationDirty: boolean;
   optimizationRules: OptimizationRule[];
   enableCSharpAnalysis: boolean;
+  isCSharpCompressionEnabled: boolean;
+  defaultCSharpCompressionLevel: CSharpCompressionLevel;
+  csharpCompressionOverrides: Record<string, CSharpCompressionLevel>;
+  csharpCompressionOptions: CSharpCompressionOptions;
 }
 
 export interface SavedLocalFilters {
@@ -120,6 +135,10 @@ export interface SavedLocalFilters {
   isOptimizationDirty?: boolean;
   optimizationRules: OptimizationRule[];
   enableCSharpAnalysis?: boolean;
+  isCSharpCompressionEnabled?: boolean;
+  defaultCSharpCompressionLevel?: CSharpCompressionLevel;
+  csharpCompressionOverrides?: Record<string, CSharpCompressionLevel>;
+  csharpCompressionOptions?: Partial<CSharpCompressionOptions>;
 }
 
 export interface Profile {

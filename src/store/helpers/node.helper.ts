@@ -6,6 +6,10 @@ import type {
   OutputMode,
   OutputModeSource,
 } from '@/core/types/file.types';
+import type {
+  CSharpCompressionLevel,
+  HierarchicalOverrideSource,
+} from '@/core/types/csharp-compression.types';
 import { isPathGloballyIgnored, compileGlobToRegex } from '@/core/services/IgnoreService';
 import { getFileExtension } from '@/core/utils/stats.utils';
 
@@ -52,6 +56,14 @@ export function computeNodes(
   const locallyIgnoredDirIds = new Set<string>();
   const overrides = localFilters.outputModeOverrides ?? {};
   const resolvedModeMap = new Map<string, { mode: OutputMode; anchorPath: string | null }>();
+
+  const defaultCsLevel: CSharpCompressionLevel =
+    localFilters.defaultCSharpCompressionLevel ?? 'compact';
+  const csOverrides = localFilters.csharpCompressionOverrides ?? {};
+  const resolvedCsMap = new Map<
+    string,
+    { level: CSharpCompressionLevel; anchorPath: string | null }
+  >();
 
   return state.nodes.map(node => {
     let isGloballyIgnored = false;
@@ -133,6 +145,36 @@ export function computeNodes(
       resolvedModeMap.set(node.id, { mode: outputMode, anchorPath: outputModeAnchorPath });
     }
 
+    // O(N) top-down longest-prefix C# compression level resolution
+    const parentCsState = node.parentId
+      ? (resolvedCsMap.get(node.parentId) ?? { level: defaultCsLevel, anchorPath: null })
+      : { level: defaultCsLevel, anchorPath: null };
+
+    const isCsFile = !node.isDirectory && node.name.toLowerCase().endsWith('.cs');
+    let csharpCompressionLevel: CSharpCompressionLevel = 'none';
+    let csharpCompressionSource: HierarchicalOverrideSource = 'default';
+    let csharpCompressionAnchorPath: string | null = null;
+
+    if (node.isDirectory || isCsFile) {
+      const directCs = csOverrides[node.relativePath];
+      if (directCs !== undefined) {
+        csharpCompressionLevel = directCs;
+        csharpCompressionSource = 'direct';
+        csharpCompressionAnchorPath = node.relativePath;
+      } else {
+        csharpCompressionLevel = parentCsState.level;
+        csharpCompressionSource = parentCsState.anchorPath ? 'inherited' : 'default';
+        csharpCompressionAnchorPath = parentCsState.anchorPath;
+      }
+
+      if (node.isDirectory) {
+        resolvedCsMap.set(node.id, {
+          level: csharpCompressionLevel,
+          anchorPath: csharpCompressionAnchorPath,
+        });
+      }
+    }
+
     return {
       ...node,
       isGloballyIgnored,
@@ -142,6 +184,9 @@ export function computeNodes(
       outputMode,
       outputModeSource,
       outputModeAnchorPath,
+      csharpCompressionLevel,
+      csharpCompressionSource,
+      csharpCompressionAnchorPath,
     };
   });
 }

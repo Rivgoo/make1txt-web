@@ -8,12 +8,15 @@ import type {
   TokenizerOutput,
 } from '@/core/types/worker.types';
 import { estimateTokenCount } from '@/core/utils/stats.utils';
+import { computeFileEffectiveConfigHash } from '@/core/utils/optimization.utils';
+import { DEFAULT_CSHARP_COMPRESSION_OPTIONS } from '@/core/constants/csharp-compression.constants';
 import { MAX_AUTO_TOKENS } from '../constants';
 
 export const createTokenizationSlice: StateCreator<FileStore, [], [], TokenizationSlice> = (set, get) => ({
   baseMetricsMap: {},
   optimizedMetricsMap: {},
   appliedOptimizationHash: 'none',
+  appliedOptimizationRules: [],
   isTokenizing: false,
   tokenizationProgress: 0,
   needsManualTokenization: false,
@@ -64,6 +67,7 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
       baseMetricsMap,
       optimizedMetricsMap,
       appliedOptimizationHash,
+      appliedOptimizationRules,
     } = get();
 
     if (isTokenizing) {
@@ -71,8 +75,11 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
       return;
     }
 
-    const optActive =
-      localFilters?.isOptimizationEnabled && appliedOptimizationHash !== 'none';
+    const isRegexActive =
+      (localFilters?.isOptimizationEnabled ?? false) && appliedOptimizationHash !== 'none';
+    const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
+    const csharpOptions =
+      localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
 
     let estimatedTokens = 0;
     for (const node of nodes) {
@@ -82,11 +89,19 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
         !node.isIgnored &&
         node.outputMode === 'full'
       ) {
+        const effHash = computeFileEffectiveConfigHash(
+          node.relativePath,
+          isRegexActive,
+          appliedOptimizationRules,
+          isCSharpEnabled,
+          node.csharpCompressionLevel,
+          csharpOptions
+        );
         const optEntry = optimizedMetricsMap[node.id];
         const hasValidOpt =
-          optActive &&
+          effHash !== 'none' &&
           optEntry !== undefined &&
-          optEntry.configHash === appliedOptimizationHash;
+          optEntry.configHash === effHash;
         const bytes = hasValidOpt
           ? optEntry.bytes
           : (baseMetricsMap[node.id]?.bytes ?? node.sizeBytes);
@@ -124,14 +139,17 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
       baseMetricsMap,
       optimizedMetricsMap,
       appliedOptimizationHash,
+      appliedOptimizationRules,
       localFilters,
       needsManualTokenization,
+      isRestoredFromProfile,
     } = get();
 
-    const activeConfigHash = appliedOptimizationHash;
-    const optActive =
-      (localFilters?.isOptimizationEnabled ?? false) &&
-      activeConfigHash !== 'none';
+    const isRegexActive =
+      (localFilters?.isOptimizationEnabled ?? false) && appliedOptimizationHash !== 'none';
+    const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
+    const csharpOptions =
+      localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
     const skipTiktoken = !forceExact && needsManualTokenization;
 
     const filesToTokenize: TokenizerFileItem[] = [];
@@ -147,18 +165,28 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
         continue;
       }
 
+      const effHash = computeFileEffectiveConfigHash(
+        n.relativePath,
+        isRegexActive,
+        appliedOptimizationRules,
+        isCSharpEnabled,
+        n.csharpCompressionLevel,
+        csharpOptions
+      );
+      const optActiveForFile = effHash !== 'none';
+
       const baseEntry = baseMetricsMap[n.id];
       const optEntry = optimizedMetricsMap[n.id];
       const hasValidOptEntry =
-        optEntry !== undefined && optEntry.configHash === activeConfigHash;
+        optEntry !== undefined && optEntry.configHash === effHash;
 
       const needsBaseBytes = baseEntry === undefined;
       const needsBaseTokens =
         !skipTiktoken &&
         (baseEntry === undefined || baseEntry.exactTokens === null);
-      const needsOptBytes = optActive && !hasValidOptEntry;
+      const needsOptBytes = optActiveForFile && !hasValidOptEntry;
       const needsOptTokens =
-        optActive &&
+        optActiveForFile &&
         !skipTiktoken &&
         (!hasValidOptEntry || optEntry.exactTokens === null);
 
@@ -170,9 +198,12 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
       ) {
         filesToTokenize.push({
           id: n.id,
+          path: n.relativePath,
           handle: n.handle as FileSystemFileHandle | null,
           content: n.content,
           sizeBytes: n.sizeBytes,
+          effectiveConfigHash: effHash,
+          csharpCompressionLevel: n.csharpCompressionLevel,
           needsBaseBytes,
           needsBaseTokens,
           needsOptBytes,
@@ -246,9 +277,9 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
               res.optExactTokens !== undefined
             ) {
               const existingOpt = nextOpt[id];
-              const sameHash = existingOpt?.configHash === activeConfigHash;
+              const sameHash = existingOpt?.configHash === res.configHash;
               nextOpt[id] = {
-                configHash: activeConfigHash,
+                configHash: res.configHash,
                 bytes:
                   res.optBytes ??
                   (sameHash ? existingOpt.bytes : (nextBase[id]?.bytes ?? 0)),
@@ -302,12 +333,38 @@ export const createTokenizationSlice: StateCreator<FileStore, [], [], Tokenizati
       });
     };
 
-    worker.postMessage({
-      runId,
-      configHash: activeConfigHash,
-      files: filesToTokenize,
-      isOptimizationEnabled: localFilters?.isOptimizationEnabled ?? false,
-      optimizationRules: localFilters?.optimizationRules ?? [],
-    } as TokenizerInput);
+    const dispatchToWorker = (preparedFiles: TokenizerFileItem[]) => {
+      if (runId !== get().tokenizationRunId) return;
+      worker!.postMessage({
+        runId,
+        files: preparedFiles,
+        isOptimizationEnabled: isRegexActive,
+        optimizationRules: appliedOptimizationRules,
+        isCSharpCompressionEnabled: isCSharpEnabled,
+        csharpCompressionOptions: csharpOptions,
+      } as TokenizerInput);
+    };
+
+    // F9: Main-thread handle-read guard for IndexedDB-restored profile handles
+    if (isRestoredFromProfile) {
+      void (async () => {
+        const hydrated = await Promise.all(
+          filesToTokenize.map(async (item) => {
+            if (item.content === undefined && item.handle) {
+              try {
+                const file = await item.handle.getFile();
+                return { ...item, content: await file.text(), sizeBytes: file.size };
+              } catch {
+                return item;
+              }
+            }
+            return item;
+          })
+        );
+        dispatchToWorker(hydrated);
+      })();
+    } else {
+      dispatchToWorker(filesToTokenize);
+    }
   },
 });

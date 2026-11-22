@@ -1,6 +1,10 @@
 import type { 
   FileNode, GeneratorStats, Profile, GlobalSettings, LocalFilters, SubtreeSyncResult, OutputMode 
 } from '@/core/types/file.types';
+import type {
+  CSharpCompressionLevel,
+  CSharpCompressionOptions,
+} from '@/core/types/csharp-compression.types';
 import type { OptimizationRule } from '@/core/types/optimization.types';
 import type { BaseFileMetrics, OptimizedFileMetrics } from '@/core/types/worker.types';
 
@@ -22,6 +26,8 @@ export interface FolderStat {
   isSelectedActiveExact: boolean;
   structureOnlySavedTokens: number;
   optimizedFilesCount: number;
+  csharpTotal: number;
+  csharpCompressedCount: number;
 }
 
 export interface DirectorySlice {
@@ -74,6 +80,12 @@ export interface FiltersSlice {
   toggleNodeOutputMode: (nodeId: string) => void;
   clearNodeOutputModeOverride: (relativePath: string) => void;
   clearAllOutputModeOverrides: () => void;
+  toggleCSharpCompression: (isEnabled: boolean) => void;
+  setDefaultCSharpCompressionLevel: (level: CSharpCompressionLevel) => void;
+  setNodeCSharpCompressionLevel: (relativePath: string, level: CSharpCompressionLevel) => void;
+  clearNodeCSharpCompressionOverride: (relativePath: string) => void;
+  clearAllCSharpCompressionOverrides: () => void;
+  updateCSharpCompressionOptions: (options: Partial<CSharpCompressionOptions>) => void;
 }
 
 export interface SelectionSlice {
@@ -89,6 +101,7 @@ export interface TokenizationSlice {
   baseMetricsMap: Record<string, BaseFileMetrics>;
   optimizedMetricsMap: Record<string, OptimizedFileMetrics>;
   appliedOptimizationHash: string;
+  appliedOptimizationRules: OptimizationRule[];
   isTokenizing: boolean;
   tokenizationProgress: number;
   needsManualTokenization: boolean;

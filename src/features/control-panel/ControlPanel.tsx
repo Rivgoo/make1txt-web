@@ -95,8 +95,10 @@ export function ControlPanel() {
   };
 
   const optActive =
-    (localFilters?.isOptimizationEnabled ?? false) &&
-    appliedOptimizationHash !== 'none';
+    ((localFilters?.isOptimizationEnabled ?? false) &&
+      appliedOptimizationHash !== 'none') ||
+    ((localFilters?.isCSharpCompressionEnabled ?? false) &&
+      stats.compressedCSharpFiles > 0);
   const hasSavings =
     optActive &&
     isMeaningfullyOptimized(
@@ -107,6 +109,12 @@ export function ControlPanel() {
     );
   const hasStructureSavings = stats.structureOnlyFiles > 0;
   const savedTokens = stats.baseTokens - stats.tokens;
+  const totalSelectedCs =
+    stats.csharpLevelCounts.none +
+    stats.csharpLevelCounts.clean +
+    stats.csharpLevelCounts.compact +
+    stats.csharpLevelCounts.skeleton +
+    stats.csharpLevelCounts.contract;
 
   // Don't show save button while scanning/tokenizing
   const shouldShowSaveButton = hasUnsavedProfileChanges && !isLoading && !isTokenizing;
@@ -247,6 +255,32 @@ export function ControlPanel() {
                         -{stats.structureOnlySavedTokens.toLocaleString()} (meta-only)
                       </span>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {(localFilters?.isCSharpCompressionEnabled ?? false) && totalSelectedCs > 0 && (
+                <div className="stat-box stat-box-wide">
+                  <span className="stat-label">
+                    {t('optimization.csharpMixTitle', { count: totalSelectedCs })}
+                  </span>
+                  <div className="cs-mix-bar">
+                    {(
+                      [
+                        ['none', 'L0'],
+                        ['clean', 'L1'],
+                        ['compact', 'L2'],
+                        ['skeleton', 'L3'],
+                        ['contract', 'L4'],
+                      ] as const
+                    ).map(([lvl, label]) => (
+                      <span
+                        key={lvl}
+                        className={`cs-mix-pill level-${label.toLowerCase()}`}
+                      >
+                        {label}: {stats.csharpLevelCounts[lvl]}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}

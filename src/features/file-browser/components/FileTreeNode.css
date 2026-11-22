@@ -341,3 +341,100 @@
   color: var(--structure-only);
   letter-spacing: 0.02em;
 }
+
+/* C# Smart AST Compression Tree Badges & Inline Popover */
+.cs-tree-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  height: 15px;
+  border-radius: 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-family: monospace;
+  letter-spacing: 0.02em;
+  margin-right: 6px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.cs-tree-badge.is-default {
+  opacity: 0.6;
+  border: 1px solid transparent;
+}
+
+.cs-tree-badge.is-inherited {
+  border: 1px dashed currentColor;
+  opacity: 0.85;
+}
+
+.cs-tree-badge.is-direct {
+  border: 1px solid currentColor;
+}
+
+.cs-tree-badge.level-l0 { color: var(--comp-l0); background: var(--comp-l0-bg); }
+.cs-tree-badge.level-l1 { color: var(--comp-l1); background: var(--comp-l1-bg); }
+.cs-tree-badge.level-l2 { color: var(--comp-l2); background: var(--comp-l2-bg); }
+.cs-tree-badge.level-l3 { color: var(--comp-l3); background: var(--comp-l3-bg); }
+.cs-tree-badge.level-l4 { color: var(--comp-l4); background: var(--comp-l4-bg); }
+
+.cs-popover-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.cs-action-btn {
+  min-width: 24px;
+  padding: 0 4px;
+}
+
+.cs-action-lbl {
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.cs-action-btn.is-direct.level-l0 { color: var(--comp-l0); border-color: var(--comp-l0); }
+.cs-action-btn.is-direct.level-l1 { color: var(--comp-l1); border-color: var(--comp-l1); }
+.cs-action-btn.is-direct.level-l2 { color: var(--comp-l2); border-color: var(--comp-l2); }
+.cs-action-btn.is-direct.level-l3 { color: var(--comp-l3); border-color: var(--comp-l3); }
+.cs-action-btn.is-direct.level-l4 { color: var(--comp-l4); border-color: var(--comp-l4); }
+
+.cs-inline-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  margin-top: 2px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.cs-pop-btn {
+  padding: 2px 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: monospace;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cs-pop-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.cs-pop-btn.active.level-l0 { color: var(--comp-l0); border-color: var(--comp-l0); background: var(--comp-l0-bg); }
+.cs-pop-btn.active.level-l1 { color: var(--comp-l1); border-color: var(--comp-l1); background: var(--comp-l1-bg); }
+.cs-pop-btn.active.level-l2 { color: var(--comp-l2); border-color: var(--comp-l2); background: var(--comp-l2-bg); }
+.cs-pop-btn.active.level-l3 { color: var(--comp-l3); border-color: var(--comp-l3); background: var(--comp-l3-bg); }
+.cs-pop-btn.active.level-l4 { color: var(--comp-l4); border-color: var(--comp-l4); background: var(--comp-l4-bg); }

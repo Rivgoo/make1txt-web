@@ -154,3 +154,29 @@
     grid-template-columns: 1fr;
   }
 }
+
+.stat-box-wide {
+  grid-column: 1 / -1;
+}
+
+.cs-mix-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.cs-mix-pill {
+  font-size: 0.7rem;
+  font-family: monospace;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.cs-mix-pill.level-l0 { color: var(--comp-l0); background: var(--comp-l0-bg); border-color: var(--comp-l0-border); }
+.cs-mix-pill.level-l1 { color: var(--comp-l1); background: var(--comp-l1-bg); border-color: var(--comp-l1-border); }
+.cs-mix-pill.level-l2 { color: var(--comp-l2); background: var(--comp-l2-bg); border-color: var(--comp-l2-border); }
+.cs-mix-pill.level-l3 { color: var(--comp-l3); background: var(--comp-l3-bg); border-color: var(--comp-l3-border); }
+.cs-mix-pill.level-l4 { color: var(--comp-l4); background: var(--comp-l4-bg); border-color: var(--comp-l4-border); }

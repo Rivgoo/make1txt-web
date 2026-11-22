@@ -1,6 +1,9 @@
 import type { StateCreator } from 'zustand';
 import type { FileStore, SelectionSlice } from '../store.types';
+import type { CSharpCompressionLevel } from '@/core/types/csharp-compression.types';
 import { estimateTokenCount } from '@/core/utils/stats.utils';
+import { computeFileEffectiveConfigHash, isCSharpFilePath } from '@/core/utils/optimization.utils';
+import { DEFAULT_CSHARP_COMPRESSION_OPTIONS } from '@/core/constants/csharp-compression.constants';
 
 export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlice> = (set, get) => ({
   toggleSelection: (id, checked) => {
@@ -82,12 +85,16 @@ export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlic
       baseMetricsMap,
       optimizedMetricsMap,
       appliedOptimizationHash,
+      appliedOptimizationRules,
       localFilters,
     } = get();
 
-    const optActive =
+    const isRegexActive =
       (localFilters?.isOptimizationEnabled ?? false) &&
       appliedOptimizationHash !== 'none';
+    const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
+    const csharpOptions =
+      localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
 
     let totalFiles = 0;
     let selectedFiles = 0;
@@ -101,6 +108,16 @@ export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlic
     let baseTokens = 0;
     let tokens = 0;
     let structureOnlySavedTokens = 0;
+    let optimizationSavedTokens = 0;
+    let compressedCSharpFiles = 0;
+
+    const csharpLevelCounts: Record<CSharpCompressionLevel, number> = {
+      none: 0,
+      clean: 0,
+      compact: 0,
+      skeleton: 0,
+      contract: 0,
+    };
 
     let isExactTokens = true;
     let isBaseExactTokens = true;
@@ -131,20 +148,42 @@ export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlic
         baseTokens += fileBaseTokens;
         if (baseExact === null) isBaseExactTokens = false;
 
+        if (isCSharpFilePath(node.relativePath)) {
+          const effLevel: CSharpCompressionLevel = isCSharpEnabled
+            ? node.csharpCompressionLevel
+            : 'none';
+          csharpLevelCounts[effLevel]++;
+          if (effLevel !== 'none') {
+            compressedCSharpFiles++;
+          }
+        }
+
+        const effHash = computeFileEffectiveConfigHash(
+          node.relativePath,
+          isRegexActive,
+          appliedOptimizationRules,
+          isCSharpEnabled,
+          node.csharpCompressionLevel,
+          csharpOptions
+        );
+
         const optEntry = optimizedMetricsMap[node.id];
         const hasValidOpt =
-          optActive &&
+          effHash !== 'none' &&
           optEntry !== undefined &&
-          optEntry.configHash === appliedOptimizationHash;
+          optEntry.configHash === effHash;
 
         if (hasValidOpt) {
           totalOptimizedBytes += optEntry.bytes;
+          let fileOptTokens: number;
           if (optEntry.exactTokens !== null) {
-            tokens += optEntry.exactTokens;
+            fileOptTokens = optEntry.exactTokens;
           } else {
-            tokens += estimateTokenCount(optEntry.bytes);
+            fileOptTokens = estimateTokenCount(optEntry.bytes);
             isExactTokens = false;
           }
+          tokens += fileOptTokens;
+          optimizationSavedTokens += Math.max(0, fileBaseTokens - fileOptTokens);
         } else {
           totalOptimizedBytes += rawBytes;
           tokens += fileBaseTokens;
@@ -172,6 +211,9 @@ export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlic
       baseTokens,
       tokens,
       structureOnlySavedTokens,
+      optimizationSavedTokens,
+      compressedCSharpFiles,
+      csharpLevelCounts,
       isExactTokens,
       isBaseExactTokens,
     };

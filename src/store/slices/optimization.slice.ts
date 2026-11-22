@@ -10,6 +10,7 @@ export const createOptimizationSlice: StateCreator<FileStore, [], [], Optimizati
       if (!isEnabled) {
         return {
           appliedOptimizationHash: 'none',
+          appliedOptimizationRules: [],
           localFilters: {
             ...state.localFilters,
             isOptimizationEnabled: false,
@@ -28,6 +29,9 @@ export const createOptimizationSlice: StateCreator<FileStore, [], [], Optimizati
         },
       };
     });
+    if (!isEnabled) {
+      get().evaluateTokenization();
+    }
   },
 
   toggleOptimizationRule: (id) => {
@@ -122,6 +126,7 @@ export const createOptimizationSlice: StateCreator<FileStore, [], [], Optimizati
 
     set((state) => ({
       appliedOptimizationHash: newHash,
+      appliedOptimizationRules: rules,
       localFilters: {
         ...state.localFilters,
         isOptimizationDirty: false,

@@ -1,8 +1,15 @@
 import { getEncoding, type Tiktoken } from 'js-tiktoken';
 import type { TokenizerInput, TokenizerOutput, TokenizerFileResult } from '../types/worker.types';
-import { optimizeText } from '../utils/optimization.utils';
+import {
+  getEffectiveRegexRulesForFile,
+  isCSharpFilePath,
+  optimizeText,
+} from '../utils/optimization.utils';
+import { treeSitterCSharpRuntime } from '../services/csharp/TreeSitterCSharpRuntime';
+import { csharpCompressor } from '../services/csharp/CSharpCompressor';
 
 const CHUNK_SIZE = 20;
+const MAX_PARSE_SIZE = 5 * 1024 * 1024; // 5 MB
 const textEncoder = new TextEncoder();
 
 // Persistent singleton encoder inside warm worker (avoids ~200ms BPE table reload per click)
@@ -15,7 +22,14 @@ function getEncoder(): Tiktoken {
 }
 
 self.onmessage = async (e: MessageEvent<TokenizerInput>) => {
-  const { runId, files, isOptimizationEnabled, optimizationRules } = e.data;
+  const {
+    runId,
+    files,
+    isOptimizationEnabled,
+    optimizationRules,
+    isCSharpCompressionEnabled,
+    csharpCompressionOptions,
+  } = e.data;
 
   if (!files || files.length === 0) {
     self.postMessage({ type: 'done', runId } as TokenizerOutput);
@@ -26,11 +40,31 @@ self.onmessage = async (e: MessageEvent<TokenizerInput>) => {
     const needsAnyTiktoken = files.some((f) => f.needsBaseTokens || f.needsOptTokens);
     const enc = needsAnyTiktoken ? getEncoder() : null;
 
+    // Lazy-initialize Tree-sitter C# WASM ONLY when incoming batch has active .cs compression
+    const needsCSharpWasm =
+      isCSharpCompressionEnabled &&
+      files.some(
+        (f) =>
+          (f.needsOptBytes || f.needsOptTokens) &&
+          f.csharpCompressionLevel !== 'none' &&
+          isCSharpFilePath(f.path)
+      );
+
+    if (needsCSharpWasm && !treeSitterCSharpRuntime.ready) {
+      try {
+        await treeSitterCSharpRuntime.init();
+      } catch (err) {
+        console.warn('[Tokenizer Worker] C# WASM init failed; falling back to regex/raw:', err);
+      }
+    }
+
     let batchResults: Record<string, TokenizerFileResult> = {};
     let processed = 0;
 
     for (const item of files) {
-      const res: TokenizerFileResult = {};
+      const res: TokenizerFileResult = {
+        configHash: item.effectiveConfigHash,
+      };
       try {
         let rawText = '';
         let rawBytes = item.sizeBytes || 0;
@@ -52,11 +86,46 @@ self.onmessage = async (e: MessageEvent<TokenizerInput>) => {
         }
 
         if (item.needsOptBytes || item.needsOptTokens) {
-          if (isOptimizationEnabled && optimizationRules.length > 0) {
-            const optResult = optimizeText(rawText, optimizationRules, false);
-            if (item.needsOptBytes) res.optBytes = optResult.optimizedBytes;
+          let workingText = rawText;
+          let workingBytes = rawBytes;
+          let wasTransformed = false;
+
+          const shouldCompressCSharp =
+            isCSharpCompressionEnabled &&
+            item.csharpCompressionLevel !== 'none' &&
+            isCSharpFilePath(item.path) &&
+            rawBytes <= MAX_PARSE_SIZE &&
+            treeSitterCSharpRuntime.ready;
+
+          if (shouldCompressCSharp) {
+            const csResult = csharpCompressor.compress(workingText, {
+              level: item.csharpCompressionLevel,
+              options: csharpCompressionOptions,
+            });
+            workingText = csResult.compressedText;
+            workingBytes = csResult.compressedBytes;
+            wasTransformed = true;
+          }
+
+          const effRules = getEffectiveRegexRulesForFile(
+            item.path,
+            isOptimizationEnabled,
+            optimizationRules,
+            isCSharpCompressionEnabled,
+            item.csharpCompressionLevel
+          );
+
+          if (effRules.length > 0) {
+            const optResult = optimizeText(workingText, effRules, false);
+            workingText = optResult.optimizedText;
+            workingBytes = optResult.optimizedBytes;
+            wasTransformed = true;
+          }
+
+          if (wasTransformed) {
+            if (item.needsOptBytes) res.optBytes = workingBytes;
             if (item.needsOptTokens) {
-              res.optExactTokens = enc ? enc.encode(optResult.optimizedText).length : null;
+              res.optExactTokens = enc ? enc.encode(workingText).length : null;
             }
           } else {
             if (item.needsOptBytes) res.optBytes = rawBytes;

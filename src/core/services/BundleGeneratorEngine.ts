@@ -1,6 +1,9 @@
 import type { WorkerInput } from '../types/worker.types';
-import { optimizeText } from '../utils/optimization.utils';
+import { getEffectiveRegexRulesForFile, optimizeText } from '../utils/optimization.utils';
 import { csharpAnalyzer, type FileMetaData } from './CSharpAnalyzer';
+import { treeSitterCSharpRuntime } from './csharp/TreeSitterCSharpRuntime';
+import { csharpCompressor } from './csharp/CSharpCompressor';
+import { DEFAULT_CSHARP_COMPRESSION_OPTIONS } from '../constants/csharp-compression.constants';
 
 const MAX_PARSE_SIZE = 5 * 1024 * 1024; // 5 MB
 const textEncoder = new TextEncoder();
@@ -23,8 +26,10 @@ export async function runBundleGeneration(
     files,
     template,
     maxFileSizeBytes,
-    isOptimizationEnabled,
-    optimizationRules,
+    isOptimizationEnabled = false,
+    optimizationRules = [],
+    isCSharpCompressionEnabled = false,
+    csharpCompressionOptions = DEFAULT_CSHARP_COMPRESSION_OPTIONS,
     enableCSharpAnalysis,
     onProgress,
     signal,
@@ -38,12 +43,18 @@ export async function runBundleGeneration(
     };
   }
 
-  // Lazy-init C# Tree-sitter WASM only if at least one selected .cs file exists (full OR structure-only)
-  if (enableCSharpAnalysis && files.some((f) => f.path.toLowerCase().endsWith('.cs'))) {
+  // Lazy-init shared C# Tree-sitter WASM if analysis OR compression is needed for any .cs file
+  const needsCSharpWasm = files.some((f) => {
+    if (!f.path.toLowerCase().endsWith('.cs')) return false;
+    if (enableCSharpAnalysis) return true;
+    return isCSharpCompressionEnabled && f.outputMode === 'full' && f.csharpCompressionLevel !== 'none';
+  });
+
+  if (needsCSharpWasm && !treeSitterCSharpRuntime.ready) {
     try {
-      await csharpAnalyzer.init();
+      await treeSitterCSharpRuntime.init();
     } catch (err) {
-      console.warn('[BundleEngine] CSharpAnalyzer init failed; continuing without AST meta.', err);
+      console.warn('[BundleEngine] TreeSitterCSharpRuntime init failed; continuing without AST.', err);
     }
   }
 
@@ -101,17 +112,39 @@ export async function runBundleGeneration(
           );
         }
       } else {
-        // 1. AST / .asmdef Meta-Analysis on RAW text (immune to destructive custom regexes)
-        if (enableCSharpAnalysis && isCSharp && size <= MAX_PARSE_SIZE) {
-          const meta = csharpAnalyzer.parseFile(rawText);
-          if (meta) {
-            meta.classes.forEach((c) => globalTypeRegistry.add(c.name));
-            meta.interfaces.forEach((i) => globalTypeRegistry.add(i.name));
-            meta.structs.forEach((s) => globalTypeRegistry.add(s.name));
-            meta.records.forEach((r) => globalTypeRegistry.add(r.name));
-            meta.enums.forEach((e) => globalTypeRegistry.add(e));
-            meta.delegates.forEach((d) => globalTypeRegistry.add(d));
-            fileMetaCache.set(item.path, meta);
+        // 1. Single-Parse Tree Sharing for .cs files (AST Meta-Analysis + AST Compression)
+        let bodyText = rawText;
+        const shouldCompressCSharp =
+          !isStructureOnly &&
+          isCSharp &&
+          isCSharpCompressionEnabled &&
+          item.csharpCompressionLevel !== 'none' &&
+          size <= MAX_PARSE_SIZE;
+
+        if (isCSharp && size <= MAX_PARSE_SIZE && (enableCSharpAnalysis || shouldCompressCSharp) && treeSitterCSharpRuntime.ready) {
+          const tree = treeSitterCSharpRuntime.parse(rawText);
+          if (tree) {
+            try {
+              if (enableCSharpAnalysis) {
+                const meta = csharpAnalyzer.extractMetaFromTree(tree);
+                meta.classes.forEach((c) => globalTypeRegistry.add(c.name));
+                meta.interfaces.forEach((i) => globalTypeRegistry.add(i.name));
+                meta.structs.forEach((s) => globalTypeRegistry.add(s.name));
+                meta.records.forEach((r) => globalTypeRegistry.add(r.name));
+                meta.enums.forEach((e) => globalTypeRegistry.add(e));
+                meta.delegates.forEach((d) => globalTypeRegistry.add(d));
+                fileMetaCache.set(item.path, meta);
+              }
+
+              if (shouldCompressCSharp) {
+                bodyText = csharpCompressor.compressFromTree(tree, rawText, {
+                  level: item.csharpCompressionLevel,
+                  options: csharpCompressionOptions,
+                }).compressedText;
+              }
+            } finally {
+              tree.delete();
+            }
           }
         } else if (enableCSharpAnalysis && isAsmdef) {
           try {
@@ -133,12 +166,18 @@ export async function runBundleGeneration(
           }
         }
 
-        // 2. Optimize & Cache Body ONLY for 'full' files (0 RAM retained for structure-only)
+        // 2. Apply effective regex rules & Cache Body ONLY for 'full' files
         if (!isStructureOnly) {
-          const bodyText =
-            isOptimizationEnabled && optimizationRules && optimizationRules.length > 0
-              ? optimizeText(rawText, optimizationRules).optimizedText
-              : rawText;
+          const effRules = getEffectiveRegexRulesForFile(
+            item.path,
+            isOptimizationEnabled,
+            optimizationRules,
+            isCSharpCompressionEnabled,
+            item.csharpCompressionLevel
+          );
+          if (effRules.length > 0) {
+            bodyText = optimizeText(bodyText, effRules, false).optimizedText;
+          }
           fileTextCache.set(
             item.path,
             new Blob([bodyText], { type: 'text/plain;charset=utf-8' })

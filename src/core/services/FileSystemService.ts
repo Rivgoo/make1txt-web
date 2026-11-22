@@ -92,6 +92,9 @@ export async function readDirectoryRecursively(
         outputMode: 'full',
         outputModeSource: 'default',
         outputModeAnchorPath: null,
+        csharpCompressionLevel: 'none',
+        csharpCompressionSource: 'default',
+        csharpCompressionAnchorPath: null,
       });
 
       const children = await readDirectoryRecursively(
@@ -126,6 +129,9 @@ export async function readDirectoryRecursively(
         outputMode: 'full',
         outputModeSource: 'default',
         outputModeAnchorPath: null,
+        csharpCompressionLevel: 'none',
+        csharpCompressionSource: 'default',
+        csharpCompressionAnchorPath: null,
       });
     }
   }

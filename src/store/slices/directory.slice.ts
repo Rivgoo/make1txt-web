@@ -11,6 +11,8 @@ import { DEFAULT_GLOBAL_SETTINGS } from '../constants';
 import { IdeSyncService } from '@/core/services/IdeSyncService';
 import { reconcileFileTree } from '@/core/utils/reconcile.utils';
 import { pruneOrphanedOutputOverrides } from '@/core/utils/output-mode.utils';
+import { pruneOrphanedOverrides } from '@/core/utils/hierarchical-override.utils';
+import { DEFAULT_CSHARP_COMPRESSION_OPTIONS } from '@/core/constants/csharp-compression.constants';
 import { computeOptimizationHash } from '@/core/utils/optimization.utils';
 
 export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlice> = (set, get) => ({
@@ -92,6 +94,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         outputMode: 'full',
         outputModeSource: 'default',
         outputModeAnchorPath: null,
+        csharpCompressionLevel: 'none',
+        csharpCompressionSource: 'default',
+        csharpCompressionAnchorPath: null,
       };
 
       const rawChildren = await readDirectoryRecursively(
@@ -135,9 +140,14 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       const currentCsChoice = get().localFilters?.enableCSharpAnalysis ?? true;
       const finalEnableCSharp = hasCsFiles ? currentCsChoice : false;
 
+      const existingPaths = new Set(reconciledNodes.map((n) => n.relativePath));
       const prunedOverrides = pruneOrphanedOutputOverrides(
         get().localFilters.outputModeOverrides ?? {},
         reconciledNodes
+      );
+      const prunedCsOverrides = pruneOrphanedOverrides(
+        get().localFilters.csharpCompressionOverrides ?? {},
+        existingPaths
       );
 
       const nextState = {
@@ -148,6 +158,7 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
           ...get().localFilters,
           extensions: extMap,
           outputModeOverrides: prunedOverrides,
+          csharpCompressionOverrides: prunedCsOverrides,
           enableCSharpAnalysis: finalEnableCSharp
         },
         isResyncing: false,
@@ -233,9 +244,14 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       const currentCsChoice = get().localFilters?.enableCSharpAnalysis ?? true;
       const finalEnableCSharp = hasCsFiles ? currentCsChoice : false;
 
+      const existingPaths = new Set(reconciledNodes.map((n) => n.relativePath));
       const prunedOverrides = pruneOrphanedOutputOverrides(
         get().localFilters.outputModeOverrides ?? {},
         reconciledNodes
+      );
+      const prunedCsOverrides = pruneOrphanedOverrides(
+        get().localFilters.csharpCompressionOverrides ?? {},
+        existingPaths
       );
 
       const nextState = {
@@ -245,6 +261,7 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
           ...get().localFilters,
           extensions: extMap,
           outputModeOverrides: prunedOverrides,
+          csharpCompressionOverrides: prunedCsOverrides,
           enableCSharpAnalysis: finalEnableCSharp
         },
         isResyncing: false,
@@ -303,6 +320,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         outputMode: 'full',
         outputModeSource: 'default',
         outputModeAnchorPath: null,
+        csharpCompressionLevel: 'none',
+        csharpCompressionSource: 'default',
+        csharpCompressionAnchorPath: null,
       };
       
       rawNodes.push(rootNode);
@@ -337,6 +357,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
               outputMode: 'full',
               outputModeSource: 'default',
               outputModeAnchorPath: null,
+              csharpCompressionLevel: 'none',
+              csharpCompressionSource: 'default',
+              csharpCompressionAnchorPath: null,
             };
             rawNodes.push(dirNode);
             dirMap.set(currentPath, dirNode);
@@ -363,6 +386,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
           outputMode: 'full',
           outputModeSource: 'default',
           outputModeAnchorPath: null,
+          csharpCompressionLevel: 'none',
+          csharpCompressionSource: 'default',
+          csharpCompressionAnchorPath: null,
         });
       });
 
@@ -474,6 +500,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         outputMode: 'full',
         outputModeSource: 'default',
         outputModeAnchorPath: null,
+        csharpCompressionLevel: 'none',
+        csharpCompressionSource: 'default',
+        csharpCompressionAnchorPath: null,
       };
 
       const rawChildren = await readDirectoryRecursively(
@@ -511,7 +540,14 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
           isOptimizationEnabled: savedFilters.isOptimizationEnabled ?? false,
           isOptimizationDirty: savedFilters.isOptimizationDirty ?? false,
           optimizationRules: savedFilters.optimizationRules ?? PREDEFINED_OPTIMIZATION_RULES,
-          enableCSharpAnalysis: hasCsFiles ? (savedFilters.enableCSharpAnalysis ?? true) : false
+          enableCSharpAnalysis: hasCsFiles ? (savedFilters.enableCSharpAnalysis ?? true) : false,
+          isCSharpCompressionEnabled: savedFilters.isCSharpCompressionEnabled ?? false,
+          defaultCSharpCompressionLevel: savedFilters.defaultCSharpCompressionLevel ?? 'compact',
+          csharpCompressionOverrides: savedFilters.csharpCompressionOverrides ?? {},
+          csharpCompressionOptions: {
+            ...DEFAULT_CSHARP_COMPRESSION_OPTIONS,
+            ...(savedFilters.csharpCompressionOptions ?? {}),
+          },
         };
       }
 
@@ -530,6 +566,7 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         gitignoreRegexes: gitRegexes,
         isRestoredFromProfile: isRestored,
         appliedOptimizationHash: initialAppliedHash,
+        appliedOptimizationRules: resolvedOptEnabled ? resolvedOptRules : [],
         localFilters: {
           extensions: extMap,
           customPatterns: localFiltersToApply.customPatterns ?? [],
@@ -542,7 +579,12 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
           isOptimizationEnabled: resolvedOptEnabled,
           isOptimizationDirty: localFiltersToApply.isOptimizationDirty ?? false,
           optimizationRules: resolvedOptRules,
-          enableCSharpAnalysis: finalEnableCSharp
+          enableCSharpAnalysis: finalEnableCSharp,
+          isCSharpCompressionEnabled: localFiltersToApply.isCSharpCompressionEnabled ?? false,
+          defaultCSharpCompressionLevel: localFiltersToApply.defaultCSharpCompressionLevel ?? 'compact',
+          csharpCompressionOverrides: localFiltersToApply.csharpCompressionOverrides ?? {},
+          csharpCompressionOptions:
+            localFiltersToApply.csharpCompressionOptions ?? { ...DEFAULT_CSHARP_COMPRESSION_OPTIONS },
         },
         nodes: rawNodes,
         isLoading: false,

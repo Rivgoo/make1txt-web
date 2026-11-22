@@ -6,7 +6,7 @@ import {
   IconSquareRoundedX, IconArrowsSort, IconAbc, IconWeight, 
   IconCpu, IconBan, IconSortAscendingLetters, IconSortDescendingLetters, 
   IconCodeAsterix, IconFilter, IconFolders, IconBrandGithub, IconRefresh,
-  IconBinaryTree, IconX, IconClick
+  IconBinaryTree, IconX, IconClick, IconBrush
 } from '@tabler/icons-react';
 import { Button } from '@/shared/ui/Button/Button';
 import { VirtualList } from '@/shared/ui/VirtualList/VirtualList';
@@ -20,6 +20,13 @@ import { FilePreview } from './components/FilePreview';
 import { useFileStore } from '@/store/useFileStore';
 import { useToast } from '@/shared/context/useToast';
 import type { FileNode } from '@/core/types/file.types';
+import type { CSharpCompressionLevel } from '@/core/types/csharp-compression.types';
+import {
+  CSHARP_COMPRESSION_LEVELS,
+  CSHARP_LEVEL_SHORT_LABELS,
+  DEFAULT_CSHARP_COMPRESSION_OPTIONS,
+} from '@/core/constants/csharp-compression.constants';
+import { computeFileEffectiveConfigHash, isCSharpFilePath } from '@/core/utils/optimization.utils';
 import { estimateTokenCount, isMeaningfullyOptimized } from '@/core/utils/stats.utils';
 import '../layout/Layout.css';
 import './FileBrowser.css';
@@ -39,6 +46,9 @@ export function FileBrowser() {
   const [isSortVisible, setIsSortVisible] = useState(false);
   const [isStructurePanelVisible, setIsStructurePanelVisible] = useState(false);
   const [isClickToMarkMode, setIsClickToMarkMode] = useState(false);
+  const [isCSharpPanelVisible, setIsCSharpPanelVisible] = useState(false);
+  const [isCSharpPaintMode, setIsCSharpPaintMode] = useState(false);
+  const [paintBrushLevel, setPaintBrushLevel] = useState<CSharpCompressionLevel>('skeleton');
   
   const [sortBy, setSortBy] = useState<'none' | 'name' | 'size' | 'tokens'>('tokens');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -55,8 +65,10 @@ export function FileBrowser() {
   const { 
     nodes, isLoading, isResyncing, scannedFilesCount, loadDirectory, resyncWorkspace, cancelDirectoryLoad, toggleExpand, toggleSelection, 
     activeTab, setActiveTab, generatedText, selectAll, deselectAll, previewNode, setPreviewNode, localFilters,
-    baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash,
-    toggleNodeOutputMode, clearNodeOutputModeOverride, clearAllOutputModeOverrides, getStats
+    baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash, appliedOptimizationRules,
+    toggleNodeOutputMode, clearNodeOutputModeOverride, clearAllOutputModeOverrides,
+    setNodeCSharpCompressionLevel, clearNodeCSharpCompressionOverride, clearAllCSharpCompressionOverrides,
+    getStats
   } = useFileStore();
   
   const { showToast } = useToast();
@@ -163,6 +175,10 @@ export function FileBrowser() {
       setIsStructurePanelVisible(false);
       setIsClickToMarkMode(false);
     }
+    if (isCSharpPanelVisible) {
+      setIsCSharpPanelVisible(false);
+      setIsCSharpPaintMode(false);
+    }
     if (isSearchVisible) setSearchTerm('');
   };
 
@@ -173,6 +189,10 @@ export function FileBrowser() {
       setIsStructurePanelVisible(false);
       setIsClickToMarkMode(false);
     }
+    if (isCSharpPanelVisible) {
+      setIsCSharpPanelVisible(false);
+      setIsCSharpPaintMode(false);
+    }
   };
 
   const toggleStructurePanel = () => {
@@ -181,6 +201,22 @@ export function FileBrowser() {
     if (!next) setIsClickToMarkMode(false);
     if (isSearchVisible) setIsSearchVisible(false);
     if (isSortVisible) setIsSortVisible(false);
+    if (isCSharpPanelVisible) {
+      setIsCSharpPanelVisible(false);
+      setIsCSharpPaintMode(false);
+    }
+  };
+
+  const toggleCSharpPanel = () => {
+    const next = !isCSharpPanelVisible;
+    setIsCSharpPanelVisible(next);
+    if (!next) setIsCSharpPaintMode(false);
+    if (isSearchVisible) setIsSearchVisible(false);
+    if (isSortVisible) setIsSortVisible(false);
+    if (isStructurePanelVisible) {
+      setIsStructurePanelVisible(false);
+      setIsClickToMarkMode(false);
+    }
   };
 
   useEffect(() => {
@@ -193,6 +229,25 @@ export function FileBrowser() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isClickToMarkMode]);
+
+  useEffect(() => {
+    if (!isCSharpPaintMode) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsCSharpPaintMode(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isCSharpPaintMode]);
+
+  const handlePaintCSharpLevel = (node: FileNode) => {
+    if (node.isIgnored) return;
+    const csOverrides = localFilters?.csharpCompressionOverrides ?? {};
+    if (csOverrides[node.relativePath] === paintBrushLevel) {
+      clearNodeCSharpCompressionOverride(node.relativePath);
+    } else {
+      setNodeCSharpCompressionLevel(node.relativePath, paintBrushLevel);
+    }
+  };
 
   const handleToggleStructureOnly = (node: FileNode) => {
     const willBeStructureOnly = node.outputMode !== 'structure-only';
@@ -248,28 +303,42 @@ export function FileBrowser() {
           isSelectedActiveExact: true,
           structureOnlySavedTokens: 0,
           optimizedFilesCount: 0,
+          csharpTotal: 0,
+          csharpCompressedCount: 0,
         };
       }
     }
 
-    const optActive =
+    const isRegexActive =
       (localFilters?.isOptimizationEnabled ?? false) &&
       appliedOptimizationHash !== 'none';
+    const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
+    const csOptions =
+      localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
 
     for (const node of nodes) {
       if (node.isDirectory) continue;
 
+      const isCs = isCSharpFilePath(node.relativePath);
       const baseEntry = baseMetricsMap[node.id];
       const rawBytes = baseEntry?.bytes ?? node.sizeBytes;
       const baseExact = baseEntry?.exactTokens ?? null;
       const fileBaseTokens =
         baseExact !== null ? baseExact : estimateTokenCount(rawBytes);
 
+      const effHash = computeFileEffectiveConfigHash(
+        node.relativePath,
+        isRegexActive,
+        appliedOptimizationRules,
+        isCSharpEnabled,
+        node.csharpCompressionLevel,
+        csOptions
+      );
       const optEntry = optimizedMetricsMap[node.id];
       const hasValidOpt =
-        optActive &&
+        effHash !== 'none' &&
         optEntry !== undefined &&
-        optEntry.configHash === appliedOptimizationHash;
+        optEntry.configHash === effHash;
       const activeBytes = hasValidOpt ? optEntry.bytes : rawBytes;
       const activeExact = hasValidOpt ? optEntry.exactTokens : baseExact;
       const fileActiveTokens =
@@ -287,6 +356,12 @@ export function FileBrowser() {
           s.absoluteTotal += 1;
           if (!node.isIgnored) {
             s.total += 1;
+            if (isCs) {
+              s.csharpTotal += 1;
+              if (isCSharpEnabled && node.outputMode === 'full' && node.csharpCompressionLevel !== 'none') {
+                s.csharpCompressedCount += 1;
+              }
+            }
             s.eligibleSizeBytes += rawBytes;
             s.totalEligibleTokens += fileBaseTokens;
             if (baseExact === null) s.isTotalEligibleExact = false;
@@ -320,7 +395,10 @@ export function FileBrowser() {
     baseMetricsMap,
     optimizedMetricsMap,
     appliedOptimizationHash,
+    appliedOptimizationRules,
     localFilters?.isOptimizationEnabled,
+    localFilters?.isCSharpCompressionEnabled,
+    localFilters?.csharpCompressionOptions,
   ]);
 
   const sortedAndFilteredNodes = useMemo(() => {
@@ -383,9 +461,12 @@ export function FileBrowser() {
       }
     }
 
-    const optActive =
+    const isRegexActive =
       (localFilters?.isOptimizationEnabled ?? false) &&
       appliedOptimizationHash !== 'none';
+    const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
+    const csOptions =
+      localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
 
     const getFileTokens = (n: FileNode): [number, number] => {
       const baseEntry = baseMetricsMap[n.id];
@@ -404,11 +485,19 @@ export function FileBrowser() {
         return [baseTok, baseTok];
       }
 
+      const effHash = computeFileEffectiveConfigHash(
+        n.relativePath,
+        isRegexActive,
+        appliedOptimizationRules,
+        isCSharpEnabled,
+        n.csharpCompressionLevel,
+        csOptions
+      );
       const optEntry = optimizedMetricsMap[n.id];
       const hasValidOpt =
-        optActive &&
+        effHash !== 'none' &&
         optEntry !== undefined &&
-        optEntry.configHash === appliedOptimizationHash;
+        optEntry.configHash === effHash;
       const activeTok = hasValidOpt
         ? (optEntry.exactTokens ?? estimateTokenCount(optEntry.bytes))
         : baseTok;
@@ -493,7 +582,7 @@ export function FileBrowser() {
     traverse(null);
     return result;
 
-  }, [nodes, searchTerm, localFilters?.showGloballyIgnored, localFilters?.showLocallyIgnored, localFilters?.showEmptyFolders, localFilters?.isOptimizationEnabled, sortBy, sortDir, sortFolders, sortRegex, folderStats, baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash]);
+  }, [nodes, searchTerm, localFilters?.showGloballyIgnored, localFilters?.showLocallyIgnored, localFilters?.showEmptyFolders, localFilters?.isOptimizationEnabled, localFilters?.isCSharpCompressionEnabled, localFilters?.csharpCompressionOptions, sortBy, sortDir, sortFolders, sortRegex, folderStats, baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash, appliedOptimizationRules]);
 
   const outputModeOverrides = localFilters?.outputModeOverrides ?? {};
   const overrideEntries = Object.entries(outputModeOverrides);
@@ -598,6 +687,30 @@ export function FileBrowser() {
                       <span className="structure-toolbar-badge">{overrideCount}</span>
                     )}
                   </Button>
+                  {nodes.some((n) => !n.isDirectory && isCSharpFilePath(n.relativePath)) && (() => {
+                    const csOverrideCount = Object.keys(localFilters?.csharpCompressionOverrides ?? {}).length;
+                    return (
+                      <Button
+                        variant="secondary"
+                        onClick={toggleCSharpPanel}
+                        data-tooltip={t('optimization.csharpManagerTitle')}
+                        data-tooltip-pos="bottom"
+                        className={`csharp-toolbar-btn ${isCSharpPanelVisible || csOverrideCount > 0 ? 'has-active' : ''}`}
+                      >
+                        <IconCode
+                          size={18}
+                          color={
+                            isCSharpPanelVisible || csOverrideCount > 0
+                              ? 'var(--comp-l2)'
+                              : 'var(--text-primary)'
+                          }
+                        />
+                        {csOverrideCount > 0 && (
+                          <span className="csharp-toolbar-badge">{csOverrideCount}</span>
+                        )}
+                      </Button>
+                    );
+                  })()}
                   <Button variant="secondary" onClick={selectAll} data-tooltip={t('browser.selectAll')} data-tooltip-pos="bottom">
                     <IconChecks size={18} />
                   </Button>
@@ -628,7 +741,97 @@ export function FileBrowser() {
               )}
             </div>
             
-            <div className={`tools-panel-slide ${(isSearchVisible || isSortVisible || isStructurePanelVisible) && nodes.length > 0 ? 'visible' : ''}`}>
+            <div className={`tools-panel-slide ${(isSearchVisible || isSortVisible || isStructurePanelVisible || isCSharpPanelVisible) && nodes.length > 0 ? 'visible' : ''}`}>
+              {isCSharpPanelVisible && (() => {
+                const csEntries = Object.entries(localFilters?.csharpCompressionOverrides ?? {});
+                const csCount = csEntries.length;
+                const browserStats = getStats();
+                return (
+                  <div className="structure-panel-wrapper csharp-panel-wrapper">
+                    <div className="structure-panel-header">
+                      <div className="structure-panel-title">
+                        <IconCode size={16} color="var(--comp-l2)" />
+                        <span>{t('optimization.csharpManagerTitle')}</span>
+                      </div>
+                      {csCount > 0 && (
+                        <Button
+                          variant="secondary"
+                          onClick={clearAllCSharpCompressionOverrides}
+                          style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                        >
+                          {t('optimization.csharpResetOverrides', { count: csCount })}
+                        </Button>
+                      )}
+                    </div>
+                    <p className="structure-panel-desc">{t('optimization.csharpManagerDesc')}</p>
+
+                    {csCount > 0 && (
+                      <div className="structure-rules-chips">
+                        {csEntries.map(([path, lvl]) => {
+                          const shortLbl = CSHARP_LEVEL_SHORT_LABELS[lvl];
+                          return (
+                            <div
+                              key={path}
+                              className={`structure-rule-chip cs-chip-${shortLbl.toLowerCase()}`}
+                              onClick={() => handleRevealRulePath(path)}
+                              title={path}
+                            >
+                              <span className="cs-chip-badge">{shortLbl}</span>
+                              <span className="structure-rule-path">{path}</span>
+                              <button
+                                type="button"
+                                className="structure-rule-remove"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  clearNodeCSharpCompressionOverride(path);
+                                }}
+                              >
+                                <IconX size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="csharp-paint-bar">
+                      <button
+                        type="button"
+                        className={`csharp-paint-toggle ${isCSharpPaintMode ? 'active' : ''}`}
+                        onClick={() => setIsCSharpPaintMode(!isCSharpPaintMode)}
+                      >
+                        <IconBrush size={14} />
+                        <span>{t('optimization.csharpPaintMode')}: {isCSharpPaintMode ? 'ON' : 'OFF'}</span>
+                      </button>
+                      <div className="csharp-brush-group">
+                        <span className="csharp-brush-label">{t('optimization.csharpBrush')}:</span>
+                        {CSHARP_COMPRESSION_LEVELS.map((lvl) => {
+                          const shortLbl = CSHARP_LEVEL_SHORT_LABELS[lvl];
+                          return (
+                            <button
+                              key={lvl}
+                              type="button"
+                              className={`csharp-brush-btn level-${shortLbl.toLowerCase()} ${paintBrushLevel === lvl ? 'active' : ''}`}
+                              onClick={() => setPaintBrushLevel(lvl)}
+                            >
+                              {shortLbl}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="csharp-impact-line">
+                      <span>{t('optimization.csharpImpact', { count: browserStats.compressedCSharpFiles })}</span>
+                      {browserStats.optimizationSavedTokens > 0 && (
+                        <span className="csharp-impact-saved">
+                          -{browserStats.optimizationSavedTokens.toLocaleString()} tok
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               {isStructurePanelVisible && (
                 <div className="structure-panel-wrapper">
                   <div className="structure-panel-header">
@@ -793,6 +996,8 @@ export function FileBrowser() {
                     onToggleSelect={toggleSelection}
                     onToggleStructureOnly={handleToggleStructureOnly}
                     isClickToMarkMode={isClickToMarkMode}
+                    isCSharpPaintMode={isCSharpPaintMode}
+                    onPaintCSharpLevel={handlePaintCSharpLevel}
                     onContextMenu={handleContextMenu}
                   />
                 )}
@@ -803,7 +1008,7 @@ export function FileBrowser() {
           {previewNode && (
             <div className={`preview-panel-container ${isResizingPreview ? 'is-resizing' : ''}`} style={{ height: previewHeight }}>
               <div className="horizontal-resizer" onMouseDown={handlePreviewResizeStart} />
-              <FilePreview node={previewNode} onClose={() => setPreviewNode(null)} />
+              <FilePreview key={previewNode.id} node={previewNode} onClose={() => setPreviewNode(null)} />
             </div>
           )}
         </>

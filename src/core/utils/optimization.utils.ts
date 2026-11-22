@@ -1,8 +1,98 @@
 import type { OptimizationRule, OptimizationResult } from '../types/optimization.types';
+import type {
+  CSharpCompressionLevel,
+  CSharpCompressionOptions,
+} from '../types/csharp-compression.types';
 
 const STRING_LITERAL_REGEX = '("([^"\\\\]|\\\\.)*"|\'([^\'\\\\]|\\\\.)*\'|`([^`\\\\]|\\\\.)*`)';
 
 const textEncoder = new TextEncoder();
+
+const AST_SUPERSEDED_PREDEFINED_RULE_IDS = new Set([
+  'opt-c-line',
+  'opt-c-block',
+  'opt-csharp-xml',
+  'opt-script-line',
+  'opt-whitespace-empty',
+]);
+
+export function isCSharpFilePath(path: string): boolean {
+  return path.toLowerCase().endsWith('.cs');
+}
+
+export function serializeRelevantCSharpOptions(
+  level: CSharpCompressionLevel,
+  options: CSharpCompressionOptions
+): string {
+  if (level === 'none') return '0';
+  const parts: (string | number | boolean)[] = [options.indentSpaces];
+  if (level === 'clean' || level === 'compact') {
+    parts.push(options.preserveTodoComments);
+  }
+  if (level === 'compact') {
+    parts.push(options.stripDiagnosticLogsInCompact);
+  }
+  if (level === 'compact' || level === 'skeleton') {
+    parts.push(options.preserveProjectUsings);
+  }
+  if (level === 'skeleton') {
+    parts.push(
+      options.preserveUnityLifecycleMethods,
+      options.emitCallGraphStubsInSkeleton,
+      options.skeletonInlineStatementLimit
+    );
+  }
+  if (level === 'contract') {
+    parts.push(options.preserveUnitySerializedFields);
+  }
+  return parts.join(',');
+}
+
+export function getEffectiveRegexRulesForFile(
+  path: string,
+  isOptEnabled: boolean,
+  rules: OptimizationRule[],
+  isCSharpEnabled: boolean,
+  csharpLevel: CSharpCompressionLevel
+): OptimizationRule[] {
+  if (!isOptEnabled) return [];
+  const active = rules.filter((r) => r.isActive);
+  if (active.length === 0) return [];
+
+  if (isCSharpFilePath(path) && isCSharpEnabled && csharpLevel !== 'none') {
+    return active.filter((r) => !AST_SUPERSEDED_PREDEFINED_RULE_IDS.has(r.id));
+  }
+  return active;
+}
+
+export function computeFileEffectiveConfigHash(
+  path: string,
+  isOptEnabled: boolean,
+  rules: OptimizationRule[],
+  isCSharpEnabled: boolean,
+  csharpLevel: CSharpCompressionLevel,
+  csharpOptions: CSharpCompressionOptions
+): string {
+  const isCsAstActive = isCSharpFilePath(path) && isCSharpEnabled && csharpLevel !== 'none';
+  const csHash = isCsAstActive
+    ? `cs:${csharpLevel}:${serializeRelevantCSharpOptions(csharpLevel, csharpOptions)}`
+    : '0';
+
+  const effRules = getEffectiveRegexRulesForFile(
+    path,
+    isOptEnabled,
+    rules,
+    isCSharpEnabled,
+    csharpLevel
+  );
+  const regexHash =
+    effRules.length > 0
+      ? JSON.stringify(effRules.map((r) => [r.pattern, r.flags, r.replacement]))
+      : '0';
+
+  if (csHash === '0' && regexHash === '0') return 'none';
+  return `${csHash}|${regexHash}`;
+}
 
 export function computeOptimizationHash(
   isEnabled: boolean,
@@ -77,11 +167,13 @@ export function optimizeText(
       const escapedMatch = escapeHtml(originalMatch);
       html = html.replace(id, `<span class="diff-removed">${escapedMatch}</span>`);
     });
-    
+
+    const actualResult = optimizeText(text, activeRules, false);
+
     return {
       optimizedText: html,
       originalBytes,
-      optimizedBytes: textEncoder.encode(processedText).byteLength
+      optimizedBytes: actualResult.optimizedBytes
     };
   }
 

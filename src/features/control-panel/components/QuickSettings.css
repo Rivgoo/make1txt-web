@@ -364,6 +364,169 @@
   margin: 0 4px;
 }
 
+/* C# Smart AST Compression Studio */
+.qs-cs-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-color);
+}
+
+.qs-cs-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.qs-cs-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cs-level-segmented {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.cs-level-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cs-level-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.cs-level-short {
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: monospace;
+}
+
+.cs-level-name {
+  font-size: 0.62rem;
+  opacity: 0.85;
+}
+
+.cs-level-btn.level-l0.active { border-color: var(--comp-l0); background: var(--comp-l0-bg); color: var(--comp-l0); }
+.cs-level-btn.level-l1.active { border-color: var(--comp-l1); background: var(--comp-l1-bg); color: var(--comp-l1); }
+.cs-level-btn.level-l2.active { border-color: var(--comp-l2); background: var(--comp-l2-bg); color: var(--comp-l2); }
+.cs-level-btn.level-l3.active { border-color: var(--comp-l3); background: var(--comp-l3-bg); color: var(--comp-l3); }
+.cs-level-btn.level-l4.active { border-color: var(--comp-l4); background: var(--comp-l4-bg); color: var(--comp-l4); }
+
+.cs-level-desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-root);
+  border: 1px solid var(--border-color);
+}
+
+.cs-finetune-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.cs-finetune-toggle:hover {
+  color: var(--text-primary);
+}
+
+.cs-finetune-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-root);
+  border: 1px dashed var(--border-color);
+}
+
+.cs-opt-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cs-indent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.cs-indent-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.cs-indent-btn {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cs-indent-btn.active {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background-color: rgba(255, 122, 0, 0.1);
+}
+
+.cs-overrides-summary {
+  font-size: 0.72rem;
+  color: var(--comp-l2);
+  font-weight: 500;
+}
+
+.qs-regex-divider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+}
+
+.qs-regex-divider span {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.qs-regex-divider small {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
 @keyframes slideDownFade {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }

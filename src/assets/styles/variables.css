@@ -27,6 +27,27 @@
   --structure-only-border: rgba(56, 189, 248, 0.35);
   --structure-only-muted: rgba(56, 189, 248, 0.65);
 
+  /* C# Smart AST Compression Tier Palette */
+  --comp-l0: #9ca3af;
+  --comp-l0-bg: rgba(156, 163, 175, 0.08);
+  --comp-l0-border: rgba(156, 163, 175, 0.35);
+
+  --comp-l1: #10b981;
+  --comp-l1-bg: rgba(16, 185, 129, 0.10);
+  --comp-l1-border: rgba(16, 185, 129, 0.40);
+
+  --comp-l2: #f59e0b;
+  --comp-l2-bg: rgba(245, 158, 11, 0.10);
+  --comp-l2-border: rgba(245, 158, 11, 0.40);
+
+  --comp-l3: #f97316;
+  --comp-l3-bg: rgba(249, 115, 22, 0.12);
+  --comp-l3-border: rgba(249, 115, 22, 0.45);
+
+  --comp-l4: #a855f7;
+  --comp-l4-bg: rgba(168, 85, 247, 0.12);
+  --comp-l4-border: rgba(168, 85, 247, 0.45);
+
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;

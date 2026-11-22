@@ -525,3 +525,132 @@
   color: var(--structure-only);
   font-weight: 600;
 }
+
+/* C# Compression Toolbar & Slide-Down Panel */
+.csharp-toolbar-btn {
+  position: relative;
+}
+
+.csharp-toolbar-btn.has-active {
+  border-color: var(--comp-l2-border);
+}
+
+.csharp-toolbar-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background-color: var(--comp-l2);
+  color: #111;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.csharp-panel-wrapper {
+  border-color: var(--comp-l2-border);
+}
+
+.csharp-panel-wrapper .structure-panel-title {
+  color: var(--comp-l2);
+}
+
+.cs-chip-badge {
+  font-size: 0.64rem;
+  font-weight: 700;
+  font-family: monospace;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.cs-chip-l0 { border-color: var(--comp-l0-border); background: var(--comp-l0-bg); }
+.cs-chip-l0 .cs-chip-badge { color: var(--comp-l0); }
+.cs-chip-l1 { border-color: var(--comp-l1-border); background: var(--comp-l1-bg); }
+.cs-chip-l1 .cs-chip-badge { color: var(--comp-l1); }
+.cs-chip-l2 { border-color: var(--comp-l2-border); background: var(--comp-l2-bg); }
+.cs-chip-l2 .cs-chip-badge { color: var(--comp-l2); }
+.cs-chip-l3 { border-color: var(--comp-l3-border); background: var(--comp-l3-bg); }
+.cs-chip-l3 .cs-chip-badge { color: var(--comp-l3); }
+.cs-chip-l4 { border-color: var(--comp-l4-border); background: var(--comp-l4-bg); }
+.cs-chip-l4 .cs-chip-badge { color: var(--comp-l4); }
+
+.csharp-paint-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-root);
+  border: 1px solid var(--border-color);
+}
+
+.csharp-paint-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.csharp-paint-toggle.active {
+  border-color: var(--comp-l2);
+  background: var(--comp-l2-bg);
+  color: var(--comp-l2);
+}
+
+.csharp-brush-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.csharp-brush-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-right: 2px;
+}
+
+.csharp-brush-btn {
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: monospace;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.csharp-brush-btn.active.level-l0 { color: var(--comp-l0); border-color: var(--comp-l0); background: var(--comp-l0-bg); }
+.csharp-brush-btn.active.level-l1 { color: var(--comp-l1); border-color: var(--comp-l1); background: var(--comp-l1-bg); }
+.csharp-brush-btn.active.level-l2 { color: var(--comp-l2); border-color: var(--comp-l2); background: var(--comp-l2-bg); }
+.csharp-brush-btn.active.level-l3 { color: var(--comp-l3); border-color: var(--comp-l3); background: var(--comp-l3-bg); }
+.csharp-brush-btn.active.level-l4 { color: var(--comp-l4); border-color: var(--comp-l4); background: var(--comp-l4-bg); }
+
+.csharp-impact-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.csharp-impact-saved {
+  color: var(--success);
+  font-weight: 600;
+  font-family: monospace;
+}

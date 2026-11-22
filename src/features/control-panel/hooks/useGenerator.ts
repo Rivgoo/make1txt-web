@@ -64,6 +64,7 @@ export function useGenerator() {
         path: n.relativePath,
         content: n.content,
         outputMode: n.outputMode,
+        csharpCompressionLevel: n.csharpCompressionLevel,
       }));
 
     if (selectedFiles.length === 0) {
@@ -122,6 +123,8 @@ export function useGenerator() {
         maxFileSizeBytes,
         isOptimizationEnabled: localFilters?.isOptimizationEnabled ?? false,
         optimizationRules: localFilters?.optimizationRules ?? [],
+        isCSharpCompressionEnabled: localFilters?.isCSharpCompressionEnabled ?? false,
+        csharpCompressionOptions: localFilters?.csharpCompressionOptions,
         enableCSharpAnalysis,
       };
       workerRef.current.postMessage(payload);
@@ -137,6 +140,8 @@ export function useGenerator() {
           maxFileSizeBytes,
           isOptimizationEnabled: localFilters?.isOptimizationEnabled ?? false,
           optimizationRules: localFilters?.optimizationRules ?? [],
+          isCSharpCompressionEnabled: localFilters?.isCSharpCompressionEnabled ?? false,
+          csharpCompressionOptions: localFilters?.csharpCompressionOptions,
           enableCSharpAnalysis,
           signal: controller.signal,
           onProgress: (p) => setProgress(p),

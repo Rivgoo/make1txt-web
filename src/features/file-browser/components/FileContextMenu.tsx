@@ -11,6 +11,12 @@ import type { FolderStat } from '@/store/useFileStore';
 import { useFileStore } from '@/store/useFileStore';
 import { useToast } from '@/shared/context/useToast';
 import { formatFileSize, getFileExtension, estimateTokenCount, isMeaningfullyOptimized } from '@/core/utils/stats.utils';
+import { computeFileEffectiveConfigHash, isCSharpFilePath } from '@/core/utils/optimization.utils';
+import {
+  CSHARP_COMPRESSION_LEVELS,
+  CSHARP_LEVEL_SHORT_LABELS,
+  DEFAULT_CSHARP_COMPRESSION_OPTIONS,
+} from '@/core/constants/csharp-compression.constants';
 import './FileContextMenu.css';
 
 interface FileContextMenuProps {
@@ -30,8 +36,9 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
   const { t } = useTranslation();
   const { 
     toggleSelection, setDirectChildrenSelection, nodes, previewNode, setPreviewNode, globalSettings, updateGlobalSettings, 
-    localFilters, toggleExtension, toggleLocalPathIgnore, baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash,
+    localFilters, toggleExtension, toggleLocalPathIgnore, baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash, appliedOptimizationRules,
     setNodeOutputMode, clearNodeOutputModeOverride,
+    setNodeCSharpCompressionLevel, clearNodeCSharpCompressionOverride,
     resyncSubtree, isResyncing
   } = useFileStore();
   
@@ -228,18 +235,35 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
     onClose();
   };
 
-  const optActive =
+  const isRegexActive =
     (localFilters?.isOptimizationEnabled ?? false) &&
     appliedOptimizationHash !== 'none';
+  const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
+  const csOptions =
+    localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
+  const optActive = isRegexActive || isCSharpEnabled;
+
+  const isCsFile = !node.isDirectory && isCSharpFilePath(node.relativePath);
+  const hasCsContent = isCsFile || (node.isDirectory && (folderStat?.csharpTotal ?? 0) > 0);
 
   const baseEntry = !node.isDirectory ? baseMetricsMap[node.id] : undefined;
   const rawFileBytes = baseEntry?.bytes ?? node.sizeBytes;
   const baseFileExact = baseEntry?.exactTokens ?? null;
+  const effHash = !node.isDirectory
+    ? computeFileEffectiveConfigHash(
+        node.relativePath,
+        isRegexActive,
+        appliedOptimizationRules,
+        isCSharpEnabled,
+        node.csharpCompressionLevel,
+        csOptions
+      )
+    : 'none';
   const optEntry = !node.isDirectory ? optimizedMetricsMap[node.id] : undefined;
   const hasValidOpt =
-    optActive &&
+    effHash !== 'none' &&
     optEntry !== undefined &&
-    optEntry.configHash === appliedOptimizationHash;
+    optEntry.configHash === effHash;
 
   const isExactTotal = node.isDirectory
     ? (folderStat?.isSelectedActiveExact ?? false)
@@ -389,6 +413,47 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
                       >
                         <IconArrowBackUp size={18} />
                         {t('structureOnly.restoreAction')} ({node.outputModeAnchorPath.split('/').pop()})
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {hasCsContent && node.outputMode !== 'structure-only' && (
+                  <>
+                    <div className="context-menu-divider" />
+                    <div className="context-menu-section-title">{t('optimization.csharpTitle')}</div>
+                    <div className="cm-cs-levels">
+                      {CSHARP_COMPRESSION_LEVELS.map((lvl) => {
+                        const shortLbl = CSHARP_LEVEL_SHORT_LABELS[lvl];
+                        const isActive = node.csharpCompressionLevel === lvl;
+                        return (
+                          <button
+                            key={lvl}
+                            type="button"
+                            className={`cm-cs-level-btn level-${shortLbl.toLowerCase()} ${isActive ? 'active' : ''}`}
+                            onClick={() => {
+                              setNodeCSharpCompressionLevel(node.relativePath, lvl);
+                              onClose();
+                            }}
+                            title={t(`optimization.levels.${lvl}.desc`)}
+                          >
+                            {shortLbl}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {node.csharpCompressionSource === 'direct' && (
+                      <button
+                        className="context-menu-action"
+                        onClick={() => {
+                          clearNodeCSharpCompressionOverride(node.relativePath);
+                          onClose();
+                        }}
+                      >
+                        <IconArrowBackUp size={18} />
+                        {t('optimization.csharpResetInherit', {
+                          level: CSHARP_LEVEL_SHORT_LABELS[localFilters?.defaultCSharpCompressionLevel ?? 'compact'],
+                        })}
                       </button>
                     )}
                   </>

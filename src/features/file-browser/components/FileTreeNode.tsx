@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   IconChevronRight,
@@ -24,6 +24,15 @@ import {
   estimateTokenCount,
   isMeaningfullyOptimized,
 } from '@/core/utils/stats.utils';
+import {
+  computeFileEffectiveConfigHash,
+  isCSharpFilePath,
+} from '@/core/utils/optimization.utils';
+import {
+  CSHARP_COMPRESSION_LEVELS,
+  CSHARP_LEVEL_SHORT_LABELS,
+  DEFAULT_CSHARP_COMPRESSION_OPTIONS,
+} from '@/core/constants/csharp-compression.constants';
 import { useToast } from '@/shared/context/useToast';
 import './FileTreeNode.css';
 
@@ -34,6 +43,8 @@ interface FileTreeNodeProps {
   onToggleSelect: (id: string, checked: boolean) => void;
   onToggleStructureOnly?: (node: FileNode) => void;
   isClickToMarkMode?: boolean;
+  isCSharpPaintMode?: boolean;
+  onPaintCSharpLevel?: (node: FileNode) => void;
   onContextMenu: (e: React.MouseEvent, node: FileNode) => void;
 }
 
@@ -44,6 +55,8 @@ export function FileTreeNode({
   onToggleSelect,
   onToggleStructureOnly,
   isClickToMarkMode = false,
+  isCSharpPaintMode = false,
+  onPaintCSharpLevel,
   onContextMenu,
 }: FileTreeNodeProps) {
   const { t } = useTranslation();
@@ -55,7 +68,11 @@ export function FileTreeNode({
     baseMetricsMap,
     optimizedMetricsMap,
     appliedOptimizationHash,
+    appliedOptimizationRules,
+    setNodeCSharpCompressionLevel,
+    clearNodeCSharpCompressionOverride,
   } = useFileStore();
+  const [isCsPopoverOpen, setIsCsPopoverOpen] = useState(false);
   const { showToast } = useToast();
   const paddingLeft = node.depth * 16 + 8;
   const checkboxRef = useRef<HTMLInputElement>(null);
@@ -90,8 +107,15 @@ export function FileTreeNode({
     }
   }, [isMixed]);
 
+  const isCsFile = !node.isDirectory && isCSharpFilePath(node.relativePath);
+  const hasCsContent = isCsFile || (node.isDirectory && (folderStat?.csharpTotal ?? 0) > 0);
+
   const handleRowClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isCSharpPaintMode && !node.isIgnored && !isEffectivelyEmpty && hasCsContent) {
+      onPaintCSharpLevel?.(node);
+      return;
+    }
     if (isClickToMarkMode && node.isDirectory && !node.isIgnored && !isEffectivelyEmpty) {
       onToggleStructureOnly?.(node);
       return;
@@ -187,9 +211,13 @@ export function FileTreeNode({
   }
 
   // Dual-Channel Metrics
-  const optActive =
+  const isRegexActive =
     (localFilters?.isOptimizationEnabled ?? false) &&
     appliedOptimizationHash !== 'none';
+  const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
+  const csOptions =
+    localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
+  const optActive = isRegexActive || isCSharpEnabled;
 
   const baseEntry = !node.isDirectory ? baseMetricsMap[node.id] : undefined;
   const rawFileBytes = baseEntry?.bytes ?? node.sizeBytes;
@@ -197,11 +225,22 @@ export function FileTreeNode({
   const fileBaseTokens =
     baseFileExact !== null ? baseFileExact : estimateTokenCount(rawFileBytes);
 
+  const effHash = !node.isDirectory
+    ? computeFileEffectiveConfigHash(
+        node.relativePath,
+        isRegexActive,
+        appliedOptimizationRules,
+        isCSharpEnabled,
+        node.csharpCompressionLevel,
+        csOptions
+      )
+    : 'none';
+
   const optEntry = !node.isDirectory ? optimizedMetricsMap[node.id] : undefined;
   const hasValidOpt =
-    optActive &&
+    effHash !== 'none' &&
     optEntry !== undefined &&
-    optEntry.configHash === appliedOptimizationHash;
+    optEntry.configHash === effHash;
   const activeFileBytes = hasValidOpt ? optEntry.bytes : rawFileBytes;
   const activeFileExact = hasValidOpt ? optEntry.exactTokens : baseFileExact;
   const fileActiveTokens =
@@ -450,6 +489,26 @@ export function FileTreeNode({
         </span>
       )}
 
+      {isCSharpEnabled &&
+        node.outputMode !== 'structure-only' &&
+        hasCsContent &&
+        !node.isIgnored &&
+        (node.csharpCompressionSource !== 'default' || isCsFile) && (() => {
+          const shortLbl = CSHARP_LEVEL_SHORT_LABELS[node.csharpCompressionLevel];
+          const isDirect = node.csharpCompressionSource === 'direct';
+          const isInherited = node.csharpCompressionSource === 'inherited';
+          return (
+            <span
+              className={`cs-tree-badge level-${shortLbl.toLowerCase()} ${
+                isDirect ? 'is-direct' : isInherited ? 'is-inherited' : 'is-default'
+              }`}
+              title={t(`optimization.levels.${node.csharpCompressionLevel}.desc`)}
+            >
+              {isInherited && node.isDirectory ? `↳${shortLbl}` : shortLbl}
+            </span>
+          );
+        })()}
+
       <span className="tree-node-meta">{metaContent}</span>
 
       <div className="tree-node-actions">
@@ -496,6 +555,60 @@ export function FileTreeNode({
             <IconBinaryTree size={14} />
           </button>
         )}
+
+        {!node.isIgnored && !isEffectivelyEmpty && hasCsContent && node.outputMode !== 'structure-only' && (() => {
+          const shortLbl = CSHARP_LEVEL_SHORT_LABELS[node.csharpCompressionLevel];
+          return (
+            <div className="cs-popover-anchor" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className={`tree-node-action-btn cs-action-btn level-${shortLbl.toLowerCase()} ${
+                  node.csharpCompressionSource === 'direct' ? 'is-direct' : ''
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsCsPopoverOpen((v) => !v);
+                }}
+                title={t('optimization.csharpTitle')}
+              >
+                <span className="cs-action-lbl">{shortLbl}</span>
+              </button>
+              {isCsPopoverOpen && (
+                <div className="cs-inline-popover" onMouseLeave={() => setIsCsPopoverOpen(false)}>
+                  {node.csharpCompressionSource === 'direct' && (
+                    <button
+                      type="button"
+                      className="cs-pop-btn cs-pop-inherit"
+                      onClick={() => {
+                        clearNodeCSharpCompressionOverride(node.relativePath);
+                        setIsCsPopoverOpen(false);
+                      }}
+                    >
+                      ↺
+                    </button>
+                  )}
+                  {CSHARP_COMPRESSION_LEVELS.map((lvl) => {
+                    const lbl = CSHARP_LEVEL_SHORT_LABELS[lvl];
+                    const isAct = node.csharpCompressionLevel === lvl && node.csharpCompressionSource === 'direct';
+                    return (
+                      <button
+                        key={lvl}
+                        type="button"
+                        className={`cs-pop-btn level-${lbl.toLowerCase()} ${isAct ? 'active' : ''}`}
+                        onClick={() => {
+                          setNodeCSharpCompressionLevel(node.relativePath, lvl);
+                          setIsCsPopoverOpen(false);
+                        }}
+                      >
+                        {lbl}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="tree-node-actions-divider" />
 

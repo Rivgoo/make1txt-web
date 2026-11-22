@@ -7,6 +7,7 @@ import { saveGlobalSettings } from '../helpers/settings.helper';
 import { PREDEFINED_OPTIMIZATION_RULES } from '@/core/constants/optimization.constants';
 import { DEFAULT_GLOBAL_SETTINGS } from '../constants';
 import { computeOptimizationHash } from '@/core/utils/optimization.utils';
+import { DEFAULT_CSHARP_COMPRESSION_OPTIONS } from '@/core/constants/csharp-compression.constants';
 
 export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice> = (set, get) => ({
   profiles: [],
@@ -44,7 +45,11 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
         treeIncludeIgnored: localFilters.treeIncludeIgnored,
         isOptimizationEnabled: localFilters.isOptimizationEnabled,
         optimizationRules: localFilters.optimizationRules,
-        enableCSharpAnalysis: localFilters.enableCSharpAnalysis
+        enableCSharpAnalysis: localFilters.enableCSharpAnalysis,
+        isCSharpCompressionEnabled: localFilters.isCSharpCompressionEnabled,
+        defaultCSharpCompressionLevel: localFilters.defaultCSharpCompressionLevel,
+        csharpCompressionOverrides: localFilters.csharpCompressionOverrides ?? {},
+        csharpCompressionOptions: localFilters.csharpCompressionOptions,
       }
     };
 
@@ -98,7 +103,14 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
           isOptimizationEnabled: optEnabled,
           isOptimizationDirty: false,
           optimizationRules: optRules,
-          enableCSharpAnalysis: savedFilters.enableCSharpAnalysis ?? true
+          enableCSharpAnalysis: savedFilters.enableCSharpAnalysis ?? true,
+          isCSharpCompressionEnabled: savedFilters.isCSharpCompressionEnabled ?? false,
+          defaultCSharpCompressionLevel: savedFilters.defaultCSharpCompressionLevel ?? 'compact',
+          csharpCompressionOverrides: savedFilters.csharpCompressionOverrides ?? {},
+          csharpCompressionOptions: {
+            ...DEFAULT_CSHARP_COMPRESSION_OPTIONS,
+            ...(savedFilters.csharpCompressionOptions ?? {}),
+          },
         };
 
         const tempState = { ...state, globalSettings: mergedSettings, localFilters: newLocalFilters };
@@ -106,6 +118,7 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
           globalSettings: mergedSettings,
           localFilters: newLocalFilters,
           appliedOptimizationHash: optEnabled ? computeOptimizationHash(true, optRules) : 'none',
+          appliedOptimizationRules: optEnabled ? optRules : [],
           ...recompileAndRecalculate(tempState)
         };
       });
@@ -148,12 +161,26 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
       treeIncludeIgnored: localFilters.treeIncludeIgnored,
       isOptimizationEnabled: localFilters.isOptimizationEnabled,
       optimizationRules: localFilters.optimizationRules,
-      enableCSharpAnalysis: localFilters.enableCSharpAnalysis
+      enableCSharpAnalysis: localFilters.enableCSharpAnalysis,
+      isCSharpCompressionEnabled: localFilters.isCSharpCompressionEnabled,
+      defaultCSharpCompressionLevel: localFilters.defaultCSharpCompressionLevel,
+      csharpCompressionOverrides: localFilters.csharpCompressionOverrides ?? {},
+      csharpCompressionOptions: localFilters.csharpCompressionOptions,
     };
 
     const snapshotFilters = {
       ...activeProfileSnapshot.localFilters,
       outputModeOverrides: activeProfileSnapshot.localFilters.outputModeOverrides ?? {},
+      isCSharpCompressionEnabled:
+        activeProfileSnapshot.localFilters.isCSharpCompressionEnabled ?? false,
+      defaultCSharpCompressionLevel:
+        activeProfileSnapshot.localFilters.defaultCSharpCompressionLevel ?? 'compact',
+      csharpCompressionOverrides:
+        activeProfileSnapshot.localFilters.csharpCompressionOverrides ?? {},
+      csharpCompressionOptions: {
+        ...DEFAULT_CSHARP_COMPRESSION_OPTIONS,
+        ...(activeProfileSnapshot.localFilters.csharpCompressionOptions ?? {}),
+      },
     };
 
     const isSettingsChanged = JSON.stringify(globalSettings) !== JSON.stringify(activeProfileSnapshot.settings);
@@ -185,7 +212,11 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
         treeIncludeIgnored: localFilters.treeIncludeIgnored,
         isOptimizationEnabled: localFilters.isOptimizationEnabled,
         optimizationRules: localFilters.optimizationRules,
-        enableCSharpAnalysis: localFilters.enableCSharpAnalysis
+        enableCSharpAnalysis: localFilters.enableCSharpAnalysis,
+        isCSharpCompressionEnabled: localFilters.isCSharpCompressionEnabled,
+        defaultCSharpCompressionLevel: localFilters.defaultCSharpCompressionLevel,
+        csharpCompressionOverrides: localFilters.csharpCompressionOverrides ?? {},
+        csharpCompressionOptions: localFilters.csharpCompressionOptions,
       }
     };
 

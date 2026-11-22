@@ -3,7 +3,13 @@ import type { FileStore, FiltersSlice } from '../store.types';
 import type { ExtensionStat, OutputMode } from '@/core/types/file.types';
 import { computeNodes, recompileAndRecalculate } from '../helpers/node.helper';
 import { PREDEFINED_OPTIMIZATION_RULES } from '@/core/constants/optimization.constants';
+import { DEFAULT_CSHARP_COMPRESSION_OPTIONS } from '@/core/constants/csharp-compression.constants';
 import { setOutputModeOverride } from '@/core/utils/output-mode.utils';
+import {
+  canonicalizeOverrideMap,
+  clearHierarchicalOverride,
+  setHierarchicalOverride,
+} from '@/core/utils/hierarchical-override.utils';
 
 export const createFiltersSlice: StateCreator<FileStore, [], [], FiltersSlice> = (set, get) => ({
   localFilters: { 
@@ -18,7 +24,11 @@ export const createFiltersSlice: StateCreator<FileStore, [], [], FiltersSlice> =
     isOptimizationEnabled: false,
     isOptimizationDirty: false,
     optimizationRules: PREDEFINED_OPTIMIZATION_RULES,
-    enableCSharpAnalysis: true
+    enableCSharpAnalysis: true,
+    isCSharpCompressionEnabled: false,
+    defaultCSharpCompressionLevel: 'compact',
+    csharpCompressionOverrides: {},
+    csharpCompressionOptions: { ...DEFAULT_CSHARP_COMPRESSION_OPTIONS },
   },
 
   updateLocalFilters: (newFilters) => {
@@ -253,6 +263,109 @@ export const createFiltersSlice: StateCreator<FileStore, [], [], FiltersSlice> =
         nodes: computeNodes(tempState),
       };
     });
+    get().evaluateTokenization();
+  },
+
+  toggleCSharpCompression: (isEnabled) => {
+    set((state) => {
+      const newFilters = {
+        ...state.localFilters,
+        isCSharpCompressionEnabled: isEnabled,
+      };
+      return { localFilters: newFilters };
+    });
+    get().evaluateTokenization();
+  },
+
+  setDefaultCSharpCompressionLevel: (level) => {
+    set((state) => {
+      const currentOverrides = state.localFilters.csharpCompressionOverrides ?? {};
+      const nextOverrides = canonicalizeOverrideMap(currentOverrides, level);
+      const newFilters = {
+        ...state.localFilters,
+        defaultCSharpCompressionLevel: level,
+        csharpCompressionOverrides: nextOverrides,
+      };
+      const tempState = { ...state, localFilters: newFilters };
+      return {
+        localFilters: newFilters,
+        nodes: computeNodes(tempState),
+      };
+    });
+    get().evaluateTokenization();
+  },
+
+  setNodeCSharpCompressionLevel: (relativePath, level) => {
+    set((state) => {
+      const defaultLevel = state.localFilters.defaultCSharpCompressionLevel ?? 'compact';
+      const currentOverrides = state.localFilters.csharpCompressionOverrides ?? {};
+      const nextOverrides = setHierarchicalOverride(
+        currentOverrides,
+        relativePath,
+        level,
+        defaultLevel
+      );
+      const newFilters = {
+        ...state.localFilters,
+        isCSharpCompressionEnabled: true,
+        csharpCompressionOverrides: nextOverrides,
+      };
+      const tempState = { ...state, localFilters: newFilters };
+      return {
+        localFilters: newFilters,
+        nodes: computeNodes(tempState),
+      };
+    });
+    get().evaluateTokenization();
+  },
+
+  clearNodeCSharpCompressionOverride: (relativePath) => {
+    set((state) => {
+      const defaultLevel = state.localFilters.defaultCSharpCompressionLevel ?? 'compact';
+      const currentOverrides = state.localFilters.csharpCompressionOverrides ?? {};
+      const nextOverrides = clearHierarchicalOverride(
+        currentOverrides,
+        relativePath,
+        defaultLevel
+      );
+      const newFilters = {
+        ...state.localFilters,
+        csharpCompressionOverrides: nextOverrides,
+      };
+      const tempState = { ...state, localFilters: newFilters };
+      return {
+        localFilters: newFilters,
+        nodes: computeNodes(tempState),
+      };
+    });
+    get().evaluateTokenization();
+  },
+
+  clearAllCSharpCompressionOverrides: () => {
+    set((state) => {
+      const newFilters = {
+        ...state.localFilters,
+        csharpCompressionOverrides: {},
+      };
+      const tempState = { ...state, localFilters: newFilters };
+      return {
+        localFilters: newFilters,
+        nodes: computeNodes(tempState),
+      };
+    });
+    get().evaluateTokenization();
+  },
+
+  updateCSharpCompressionOptions: (options) => {
+    set((state) => ({
+      localFilters: {
+        ...state.localFilters,
+        csharpCompressionOptions: {
+          ...state.localFilters.csharpCompressionOptions,
+          ...options,
+        },
+      },
+    }));
     get().evaluateTokenization();
   },
 });

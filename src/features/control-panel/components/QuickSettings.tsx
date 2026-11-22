@@ -10,6 +10,12 @@ import { Button } from '@/shared/ui/Button/Button';
 import { useFileStore } from '@/store/useFileStore';
 import { isValidGlobOrRegex } from '@/core/services/IgnoreService';
 import { useToast } from '@/shared/context/useToast';
+import {
+  CSHARP_COMPRESSION_LEVELS,
+  CSHARP_LEVEL_SHORT_LABELS,
+  DEFAULT_CSHARP_COMPRESSION_OPTIONS,
+} from '@/core/constants/csharp-compression.constants';
+import type { CSharpCompressionLevel } from '@/core/types/csharp-compression.types';
 import './QuickSettings.css';
 
 export function QuickSettings() {
@@ -18,7 +24,8 @@ export function QuickSettings() {
     nodes, localFilters, updateLocalFilters, toggleExtension, setAllExtensionsState, 
     addCustomPattern, updateCustomPattern, toggleCustomPattern, removeCustomPattern, moveCustomPattern,
     globalSettings, needsManualTokenization, isTokenizing, tokenizationProgress, runTokenization, cancelTokenization, invalidateAllMetrics, getStats,
-    toggleOptimization, toggleOptimizationRule, addCustomOptimizationRule, removeCustomOptimizationRule, applyOptimization
+    toggleOptimization, toggleOptimizationRule, addCustomOptimizationRule, removeCustomOptimizationRule, applyOptimization,
+    toggleCSharpCompression, setDefaultCSharpCompressionLevel, updateCSharpCompressionOptions
   } = useFileStore();
   
   const { showToast } = useToast();
@@ -28,6 +35,7 @@ export function QuickSettings() {
   const [editPatternValue, setEditPatternValue] = useState('');
 
   const [isOptExpanded, setIsOptExpanded] = useState(false);
+  const [isCSharpOptsExpanded, setIsCSharpOptsExpanded] = useState(false);
   const [newOptPattern, setNewOptPattern] = useState('');
   const [newOptReplace, setNewOptReplace] = useState('');
 
@@ -231,6 +239,121 @@ export function QuickSettings() {
 
         {isOptExpanded && (
           <div className="qs-opt-body">
+            {/* C# Smart AST Compression Studio */}
+            <div className={`qs-cs-box ${!hasCsFiles ? 'disabled' : ''}`}>
+              <div
+                className={`toggle-row ${localFilters?.isCSharpCompressionEnabled ? 'active' : ''}`}
+                onClick={() => hasCsFiles && toggleCSharpCompression(!localFilters?.isCSharpCompressionEnabled)}
+                style={{ opacity: hasCsFiles ? 1 : 0.5, pointerEvents: hasCsFiles ? 'auto' : 'none' }}
+              >
+                <span className="qs-title">
+                  <IconCode size={16} color="var(--comp-l2)" />
+                  {t('optimization.csharpTitle')}
+                </span>
+                <div className="toggle-switch" />
+              </div>
+
+              {!hasCsFiles && (
+                <div className="qs-cs-hint">{t('optimization.csharpNoFiles')}</div>
+              )}
+
+              {hasCsFiles && (
+                <div
+                  className="qs-cs-controls"
+                  style={{
+                    opacity: localFilters?.isCSharpCompressionEnabled ? 1 : 0.55,
+                    pointerEvents: localFilters?.isCSharpCompressionEnabled ? 'auto' : 'none',
+                  }}
+                >
+                  <span className="opt-rule-group-title">{t('optimization.csharpDefaultLevel')}</span>
+                  <div className="cs-level-segmented">
+                    {CSHARP_COMPRESSION_LEVELS.map((lvl: CSharpCompressionLevel) => {
+                      const active = (localFilters?.defaultCSharpCompressionLevel ?? 'compact') === lvl;
+                      const shortLabel = CSHARP_LEVEL_SHORT_LABELS[lvl];
+                      return (
+                        <button
+                          key={lvl}
+                          type="button"
+                          className={`cs-level-btn level-${shortLabel.toLowerCase()} ${active ? 'active' : ''}`}
+                          onClick={() => setDefaultCSharpCompressionLevel(lvl)}
+                          title={t(`optimization.levels.${lvl}.desc`)}
+                        >
+                          <span className="cs-level-short">{shortLabel}</span>
+                          <span className="cs-level-name">{t(`optimization.levels.${lvl}.name`)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="cs-level-desc">
+                    {t(`optimization.levels.${localFilters?.defaultCSharpCompressionLevel ?? 'compact'}.desc`)}
+                  </div>
+
+                  <div
+                    className="cs-finetune-toggle"
+                    onClick={() => setIsCSharpOptsExpanded(!isCSharpOptsExpanded)}
+                  >
+                    {isCSharpOptsExpanded ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+                    <span>{t('optimization.csharpFineTune')}</span>
+                  </div>
+
+                  {isCSharpOptsExpanded && (() => {
+                    const csOpts = localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
+                    return (
+                      <div className="cs-finetune-drawer">
+                        {(
+                          [
+                            'preserveUnitySerializedFields',
+                            'preserveUnityLifecycleMethods',
+                            'emitCallGraphStubsInSkeleton',
+                            'stripDiagnosticLogsInCompact',
+                            'preserveTodoComments',
+                            'preserveProjectUsings',
+                          ] as const
+                        ).map((optKey) => (
+                          <label key={optKey} className="cs-opt-check">
+                            <input
+                              type="checkbox"
+                              checked={csOpts[optKey]}
+                              onChange={(e) => updateCSharpCompressionOptions({ [optKey]: e.target.checked })}
+                            />
+                            <span>{t(`optimization.options.${optKey}`)}</span>
+                          </label>
+                        ))}
+                        <div className="cs-indent-row">
+                          <span>{t('optimization.options.indentWidth')}:</span>
+                          <div className="cs-indent-pills">
+                            {([0, 1, 2] as const).map((w) => (
+                              <button
+                                key={w}
+                                type="button"
+                                className={`cs-indent-btn ${csOpts.indentSpaces === w ? 'active' : ''}`}
+                                onClick={() => updateCSharpCompressionOptions({ indentSpaces: w })}
+                              >
+                                {w} sp
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {Object.keys(localFilters?.csharpCompressionOverrides ?? {}).length > 0 && (
+                    <div className="cs-overrides-summary">
+                      {t('optimization.csharpActiveOverrides', {
+                        count: Object.keys(localFilters.csharpCompressionOverrides).length,
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="qs-regex-divider">
+              <span>{t('optimization.csharpUniversalRegex')}</span>
+              <small>{t('optimization.csharpUniversalRegexHint')}</small>
+            </div>
             
             {localFilters?.isOptimizationDirty && nodes.length > 0 && (
               <div className="opt-apply-row">
