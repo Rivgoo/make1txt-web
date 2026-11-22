@@ -87,37 +87,104 @@ export const DEFAULT_IGNORED_EXTENSIONS = [
  * Parses a .gitignore file content into a list of compiled RegExp matchers.
  */
 export function createIgnoreRegexes(gitignoreContent: string): RegExp[] {
-  return gitignoreContent
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('#'))
-    .map(compileGlobToRegex);
+  const regexes: RegExp[] = [];
+  for (const rawLine of gitignoreContent.split(/\r?\n/)) {
+    // Strip trailing unescaped whitespace
+    const line = rawLine.replace(/(?<!\\)\s+$/, '').trimStart();
+    if (!line || line.startsWith('#') || line.startsWith('!')) continue;
+    try {
+      regexes.push(compileGlobToRegex(line));
+    } catch {
+      // Ignore malformed lines in .gitignore
+    }
+  }
+  return regexes;
+}
+
+function escapeRegexChar(ch: string): string {
+  return /[.+^${}()|[\]\\]/.test(ch) ? `\\${ch}` : ch;
 }
 
 export function compileGlobToRegex(pattern: string): RegExp {
-  let cleaned = pattern.trim();
-  
-  if (cleaned.endsWith('/')) {
+  let cleaned = pattern.replace(/(?<!\\)\s+$/, '').trimStart();
+
+  if (cleaned.startsWith('\\#') || cleaned.startsWith('\\!')) {
+    cleaned = cleaned.slice(1);
+  }
+
+  if (cleaned.endsWith('/') && !cleaned.endsWith('\\/')) {
     cleaned = cleaned.slice(0, -1);
   }
 
-  const isRootAnchored = cleaned.startsWith('/');
-  if (isRootAnchored) {
-    cleaned = cleaned.substring(1);
+  let isRootAnchored = false;
+  if (cleaned.startsWith('/')) {
+    isRootAnchored = true;
+    cleaned = cleaned.slice(1);
+  } else if (cleaned.startsWith('**/')) {
+    cleaned = cleaned.slice(3);
+  } else if (cleaned.includes('/')) {
+    isRootAnchored = true;
   }
 
-  const escaped = cleaned.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  let regexStr = '';
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
 
-  const regexStr = escaped
-    .replace(/\*\*/g, '.*')       
-    .replace(/\*/g, '[^/]*')      
-    .replace(/\?/g, '[^/]');      
+    if (ch === '\\' && i + 1 < cleaned.length) {
+      regexStr += escapeRegexChar(cleaned[++i]);
+      continue;
+    }
 
-  // ^([^/]+/)? gracefully bypasses the injected root folder name (e.g. "sim/")
-  // while strictly anchoring the rest of the pattern to the virtual root.
-  const prefix = isRootAnchored ? '^([^/]+/)?' : '(^|/)';
+    if (ch === '*') {
+      if (cleaned[i + 1] === '*') {
+        if (cleaned[i + 2] === '/') {
+          regexStr += '(?:.+/)?';
+          i += 2;
+        } else {
+          regexStr += '.*';
+          i += 1;
+        }
+      } else {
+        regexStr += '[^/]*';
+      }
+      continue;
+    }
 
-  return new RegExp(`${prefix}${regexStr}($|/)`);
+    if (ch === '?') {
+      regexStr += '[^/]';
+      continue;
+    }
+
+    if (ch === '[') {
+      // Find closing unescaped ']'
+      let j = i + 1;
+      if (j < cleaned.length && (cleaned[j] === '!' || cleaned[j] === '^')) j++;
+      if (j < cleaned.length && cleaned[j] === ']') j++;
+      while (j < cleaned.length && cleaned[j] !== ']') {
+        if (cleaned[j] === '\\' && j + 1 < cleaned.length) j++;
+        j++;
+      }
+      if (j < cleaned.length && cleaned[j] === ']') {
+        let content = cleaned.slice(i + 1, j);
+        if (content.startsWith('!')) {
+          content = '^' + content.slice(1);
+        }
+        regexStr += `[${content}]`;
+        i = j;
+        continue;
+      }
+      regexStr += '\\[';
+      continue;
+    }
+
+    regexStr += escapeRegexChar(ch);
+  }
+
+  // ^(?:[^/]+/)? skips the injected workspace root folder name (e.g. "uCSS/")
+  // while strictly anchoring the pattern to the project root.
+  const prefix = isRootAnchored ? '^(?:[^/]+/)?' : '(?:^|/)';
+
+  return new RegExp(`${prefix}${regexStr}(?:/|$)`);
 }
 
 export function isValidGlobOrRegex(pattern: string): boolean {
