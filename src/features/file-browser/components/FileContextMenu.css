@@ -143,6 +143,22 @@
   background-color: rgba(239, 68, 68, 0.1);
 }
 
+.context-menu-action.action-structure-only {
+  color: var(--structure-only);
+}
+
+.context-menu-action.action-structure-only:hover:not(:disabled) {
+  background-color: var(--structure-only-bg);
+}
+
+.context-menu-action.action-full-override {
+  color: var(--accent-primary);
+}
+
+.context-menu-action.action-full-override:hover:not(:disabled) {
+  background-color: rgba(255, 122, 0, 0.1);
+}
+
 .context-menu-action-desc {
   color: var(--text-muted);
   font-size: 0.7rem;

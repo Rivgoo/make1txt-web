@@ -8,7 +8,8 @@ export const DEFAULT_TREE_SYMBOLS: TreeSymbols = {
   last: '└── ',
   vertical: '│   ',
   space: '    ',
-  ignoredSuffix: ' (ignored)'
+  ignoredSuffix: ' (ignored)',
+  structureOnlySuffix: ' (structure-only)',
 };
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {

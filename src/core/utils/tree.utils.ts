@@ -70,6 +70,22 @@ export function generateTextTree(nodes: FileNode[], options: TreeOptions): strin
       
       const isSkipped = child.isIgnored || !child.isSelected;
       const ignoredMark = isSkipped ? symbols.ignoredSuffix : '';
+
+      const structureOnlyMark =
+        child.isDirectory &&
+        child.outputMode === 'structure-only' &&
+        child.outputModeSource === 'direct' &&
+        !isSkipped
+          ? (symbols.structureOnlySuffix ?? ' (structure-only)')
+          : '';
+
+      const fullOverrideMark =
+        child.isDirectory &&
+        child.outputMode === 'full' &&
+        child.outputModeSource === 'direct' &&
+        !isSkipped
+          ? ' (full)'
+          : '';
       
       // Inject C# metadata into the tree structure if present
       const metaString = (!child.isDirectory && metaMap && metaMap[child.relativePath]) 
@@ -77,13 +93,13 @@ export function generateTextTree(nodes: FileNode[], options: TreeOptions): strin
         : '';
       
       if (isAbsoluteRoot) {
-        output += `${child.name}${suffix}${ignoredMark}${metaString}\n`;
+        output += `${child.name}${suffix}${ignoredMark}${structureOnlyMark}${fullOverrideMark}${metaString}\n`;
         if (child.isDirectory) {
           traverse(child.id, prefix);
         }
       } else {
         const pointer = isLast ? symbols.last : symbols.branch;
-        output += `${prefix}${pointer}${child.name}${suffix}${ignoredMark}${metaString}\n`;
+        output += `${prefix}${pointer}${child.name}${suffix}${ignoredMark}${structureOnlyMark}${fullOverrideMark}${metaString}\n`;
         
         if (child.isDirectory) {
           const extension = isLast ? symbols.space : symbols.vertical;

@@ -19,6 +19,14 @@
   --success: #10b981;
   --warning: #f59e0b;
 
+  /* Structure & Meta-Analysis Only semantic palette (Sky Cyan) */
+  --structure-only: #38bdf8;
+  --structure-only-hover: #7dd3fc;
+  --structure-only-bg: rgba(56, 189, 248, 0.08);
+  --structure-only-bg-inherited: rgba(56, 189, 248, 0.035);
+  --structure-only-border: rgba(56, 189, 248, 0.35);
+  --structure-only-muted: rgba(56, 189, 248, 0.65);
+
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 1rem;

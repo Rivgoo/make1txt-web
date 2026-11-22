@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { FileStore, SelectionSlice } from '../store.types';
-import { estimateTokenCount, hasMeaningfulOptimization } from '@/core/utils/stats.utils';
+import { estimateTokenCount } from '@/core/utils/stats.utils';
 
 export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlice> = (set, get) => ({
   toggleSelection: (id, checked) => {
@@ -77,67 +77,103 @@ export const createSelectionSlice: StateCreator<FileStore, [], [], SelectionSlic
   },
 
   getStats: () => {
-    const { nodes, realTokenMap, optimizedBytesMap, localFilters } = get();
-    
+    const {
+      nodes,
+      baseMetricsMap,
+      optimizedMetricsMap,
+      appliedOptimizationHash,
+      localFilters,
+    } = get();
+
+    const optActive =
+      (localFilters?.isOptimizationEnabled ?? false) &&
+      appliedOptimizationHash !== 'none';
+
     let totalFiles = 0;
     let selectedFiles = 0;
+    let fullSelectedFiles = 0;
+    let structureOnlyFiles = 0;
+
     let totalSizeBytes = 0;
     let totalOptimizedBytes = 0;
-    
+    let structureOnlySavedBytes = 0;
+
     let baseTokens = 0;
-    let optimizedTokens = 0;
-    
-    let allSelectedHaveRealTokens = true;
+    let tokens = 0;
+    let structureOnlySavedTokens = 0;
+
+    let isExactTokens = true;
+    let isBaseExactTokens = true;
 
     for (const node of nodes) {
       if (node.isDirectory) continue;
-      
+
       if (!node.isIgnored) totalFiles++;
-      
+
       if (node.isSelected && !node.isIgnored) {
         selectedFiles++;
-        totalSizeBytes += node.sizeBytes;
-        
-        const optBytes = optimizedBytesMap[node.id];
-        let finalBytes = node.sizeBytes;
 
-        if (localFilters?.isOptimizationEnabled && optBytes !== undefined && hasMeaningfulOptimization(node.sizeBytes, optBytes)) {
-          finalBytes = optBytes;
-          totalOptimizedBytes += optBytes;
-        } else {
-          totalOptimizedBytes += node.sizeBytes;
+        const baseEntry = baseMetricsMap[node.id];
+        const rawBytes = baseEntry?.bytes ?? node.sizeBytes;
+        const baseExact = baseEntry?.exactTokens ?? null;
+        const fileBaseTokens =
+          baseExact !== null ? baseExact : estimateTokenCount(rawBytes);
+
+        if (node.outputMode === 'structure-only') {
+          structureOnlyFiles++;
+          structureOnlySavedBytes += rawBytes;
+          structureOnlySavedTokens += fileBaseTokens;
+          continue;
         }
-        
-        if (realTokenMap[node.id] !== undefined) {
-          baseTokens += realTokenMap[node.id];
-          
-          if (localFilters?.isOptimizationEnabled && finalBytes < node.sizeBytes) {
-            // If we optimized, we estimate the tokens of the new string roughly 
-            // since we skipped Tiktoken for the optimized string for speed.
-            optimizedTokens += estimateTokenCount(finalBytes);
+
+        fullSelectedFiles++;
+        totalSizeBytes += rawBytes;
+        baseTokens += fileBaseTokens;
+        if (baseExact === null) isBaseExactTokens = false;
+
+        const optEntry = optimizedMetricsMap[node.id];
+        const hasValidOpt =
+          optActive &&
+          optEntry !== undefined &&
+          optEntry.configHash === appliedOptimizationHash;
+
+        if (hasValidOpt) {
+          totalOptimizedBytes += optEntry.bytes;
+          if (optEntry.exactTokens !== null) {
+            tokens += optEntry.exactTokens;
           } else {
-            optimizedTokens += realTokenMap[node.id];
+            tokens += estimateTokenCount(optEntry.bytes);
+            isExactTokens = false;
           }
         } else {
-          baseTokens += estimateTokenCount(node.sizeBytes);
-          optimizedTokens += estimateTokenCount(finalBytes);
-          allSelectedHaveRealTokens = false;
+          totalOptimizedBytes += rawBytes;
+          tokens += fileBaseTokens;
+          if (baseExact === null) isExactTokens = false;
         }
       }
     }
 
-    const estimatedTotal = estimateTokenCount(totalSizeBytes);
-    if (selectedFiles === 0) allSelectedHaveRealTokens = false;
+    if (fullSelectedFiles === 0) {
+      isExactTokens = selectedFiles > 0;
+      isBaseExactTokens = selectedFiles > 0;
+    }
+
+    const estimatedTotal = estimateTokenCount(totalOptimizedBytes);
 
     return {
       totalFiles,
       selectedFiles,
+      fullSelectedFiles,
+      structureOnlyFiles,
       totalSizeBytes,
       totalOptimizedBytes,
+      structureOnlySavedBytes,
       totalWords: Math.floor(estimatedTotal * 0.75),
       baseTokens,
-      tokens: optimizedTokens,
-      isExactTokens: allSelectedHaveRealTokens,
+      tokens,
+      structureOnlySavedTokens,
+      isExactTokens,
+      isBaseExactTokens,
     };
   }
 });

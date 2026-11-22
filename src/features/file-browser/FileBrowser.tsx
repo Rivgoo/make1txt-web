@@ -5,7 +5,8 @@ import {
   IconListTree, IconCode, IconChecks, IconSquareX, IconFiles, 
   IconSquareRoundedX, IconArrowsSort, IconAbc, IconWeight, 
   IconCpu, IconBan, IconSortAscendingLetters, IconSortDescendingLetters, 
-  IconCodeAsterix, IconFilter, IconFolders, IconBrandGithub, IconRefresh
+  IconCodeAsterix, IconFilter, IconFolders, IconBrandGithub, IconRefresh,
+  IconBinaryTree, IconX, IconClick
 } from '@tabler/icons-react';
 import { Button } from '@/shared/ui/Button/Button';
 import { VirtualList } from '@/shared/ui/VirtualList/VirtualList';
@@ -19,7 +20,7 @@ import { FilePreview } from './components/FilePreview';
 import { useFileStore } from '@/store/useFileStore';
 import { useToast } from '@/shared/context/useToast';
 import type { FileNode } from '@/core/types/file.types';
-import { hasMeaningfulOptimization } from '@/core/utils/stats.utils';
+import { estimateTokenCount, isMeaningfullyOptimized } from '@/core/utils/stats.utils';
 import '../layout/Layout.css';
 import './FileBrowser.css';
 
@@ -36,6 +37,8 @@ export function FileBrowser() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [isSortVisible, setIsSortVisible] = useState(false);
+  const [isStructurePanelVisible, setIsStructurePanelVisible] = useState(false);
+  const [isClickToMarkMode, setIsClickToMarkMode] = useState(false);
   
   const [sortBy, setSortBy] = useState<'none' | 'name' | 'size' | 'tokens'>('tokens');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -52,7 +55,8 @@ export function FileBrowser() {
   const { 
     nodes, isLoading, isResyncing, scannedFilesCount, loadDirectory, resyncWorkspace, cancelDirectoryLoad, toggleExpand, toggleSelection, 
     activeTab, setActiveTab, generatedText, selectAll, deselectAll, previewNode, setPreviewNode, localFilters,
-    realTokenMap, optimizedBytesMap
+    baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash,
+    toggleNodeOutputMode, clearNodeOutputModeOverride, clearAllOutputModeOverrides, getStats
   } = useFileStore();
   
   const { showToast } = useToast();
@@ -155,12 +159,60 @@ export function FileBrowser() {
   const toggleSearch = () => {
     setIsSearchVisible(!isSearchVisible);
     if (isSortVisible) setIsSortVisible(false);
+    if (isStructurePanelVisible) {
+      setIsStructurePanelVisible(false);
+      setIsClickToMarkMode(false);
+    }
     if (isSearchVisible) setSearchTerm('');
   };
 
   const toggleSort = () => {
     setIsSortVisible(!isSortVisible);
     if (isSearchVisible) setIsSearchVisible(false);
+    if (isStructurePanelVisible) {
+      setIsStructurePanelVisible(false);
+      setIsClickToMarkMode(false);
+    }
+  };
+
+  const toggleStructurePanel = () => {
+    const next = !isStructurePanelVisible;
+    setIsStructurePanelVisible(next);
+    if (!next) setIsClickToMarkMode(false);
+    if (isSearchVisible) setIsSearchVisible(false);
+    if (isSortVisible) setIsSortVisible(false);
+  };
+
+  useEffect(() => {
+    if (!isClickToMarkMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsClickToMarkMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isClickToMarkMode]);
+
+  const handleToggleStructureOnly = (node: FileNode) => {
+    const willBeStructureOnly = node.outputMode !== 'structure-only';
+    const wasTreeDisabled = !localFilters?.generateTree;
+    toggleNodeOutputMode(node.id);
+    if (willBeStructureOnly && wasTreeDisabled) {
+      showToast('info', t('common.info'), t('structureOnly.autoEnabledTree'));
+    }
+  };
+
+  const handleRevealRulePath = (targetPath: string) => {
+    const parts = targetPath.split('/');
+    let acc = '';
+    for (let i = 0; i < parts.length - 1; i++) {
+      acc = acc ? `${acc}/${parts[i]}` : parts[i];
+      const dirNode = nodes.find((n) => n.isDirectory && n.relativePath === acc);
+      if (dirNode && !dirNode.isExpanded) {
+        toggleExpand(dirNode.id);
+      }
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent, node: FileNode) => {
@@ -173,62 +225,103 @@ export function FileBrowser() {
 
   const folderStats = useMemo(() => {
     const stats: Record<string, FolderStat> = {};
+    const dirById = new Map<string, FileNode>();
 
     for (const node of nodes) {
       if (node.isDirectory) {
-        stats[node.relativePath] = { 
-          total: 0, 
-          selected: 0, 
-          absoluteTotal: 0, 
-          sizeBytes: 0, 
-          selectedSizeBytes: 0,
-          selectedOptimizedBytes: 0,
-          exactTokens: 0,
-          optimizedFilesCount: 0
+        dirById.set(node.id, node);
+        stats[node.relativePath] = {
+          total: 0,
+          selected: 0,
+          fullSelected: 0,
+          structureOnlySelected: 0,
+          absoluteTotal: 0,
+          eligibleSizeBytes: 0,
+          selectedBaseBytes: 0,
+          selectedActiveBytes: 0,
+          structureOnlySavedBytes: 0,
+          totalEligibleTokens: 0,
+          isTotalEligibleExact: true,
+          selectedBaseTokens: 0,
+          isSelectedBaseExact: true,
+          selectedActiveTokens: 0,
+          isSelectedActiveExact: true,
+          structureOnlySavedTokens: 0,
+          optimizedFilesCount: 0,
         };
       }
     }
 
+    const optActive =
+      (localFilters?.isOptimizationEnabled ?? false) &&
+      appliedOptimizationHash !== 'none';
+
     for (const node of nodes) {
-      if (!node.isDirectory) {
-        const parts = node.relativePath.split('/');
-        parts.pop();
-        
-        let currentPath = '';
-        for (const part of parts) {
-          currentPath = currentPath ? `${currentPath}/${part}` : part;
-          if (stats[currentPath]) {
-            stats[currentPath].absoluteTotal += 1;
-            stats[currentPath].sizeBytes += node.sizeBytes;
-            if (!node.isIgnored) {
-              stats[currentPath].total += 1;
-              if (node.isSelected) {
-                stats[currentPath].selected += 1;
-                stats[currentPath].selectedSizeBytes += node.sizeBytes;
-                
-                const optBytes = (optimizedBytesMap && optimizedBytesMap[node.id]) ?? node.sizeBytes;
-                stats[currentPath].selectedOptimizedBytes += optBytes;
-                
-                if (localFilters?.isOptimizationEnabled && hasMeaningfulOptimization(node.sizeBytes, optBytes)) {
-                  stats[currentPath].optimizedFilesCount += 1;
-                }
-                
-                if (stats[currentPath].exactTokens !== undefined) {
-                  if (realTokenMap && realTokenMap[node.id] !== undefined) {
-                    stats[currentPath].exactTokens! += realTokenMap[node.id];
-                  } else {
-                    stats[currentPath].exactTokens = undefined;
-                  }
-                }
+      if (node.isDirectory) continue;
+
+      const baseEntry = baseMetricsMap[node.id];
+      const rawBytes = baseEntry?.bytes ?? node.sizeBytes;
+      const baseExact = baseEntry?.exactTokens ?? null;
+      const fileBaseTokens =
+        baseExact !== null ? baseExact : estimateTokenCount(rawBytes);
+
+      const optEntry = optimizedMetricsMap[node.id];
+      const hasValidOpt =
+        optActive &&
+        optEntry !== undefined &&
+        optEntry.configHash === appliedOptimizationHash;
+      const activeBytes = hasValidOpt ? optEntry.bytes : rawBytes;
+      const activeExact = hasValidOpt ? optEntry.exactTokens : baseExact;
+      const fileActiveTokens =
+        activeExact !== null ? activeExact : estimateTokenCount(activeBytes);
+      const meaningfulOpt =
+        hasValidOpt &&
+        isMeaningfullyOptimized(rawBytes, activeBytes, baseExact, activeExact);
+
+      let currParentId = node.parentId;
+      while (currParentId) {
+        const dirNode = dirById.get(currParentId);
+        if (!dirNode) break;
+        const s = stats[dirNode.relativePath];
+        if (s) {
+          s.absoluteTotal += 1;
+          if (!node.isIgnored) {
+            s.total += 1;
+            s.eligibleSizeBytes += rawBytes;
+            s.totalEligibleTokens += fileBaseTokens;
+            if (baseExact === null) s.isTotalEligibleExact = false;
+
+            if (node.isSelected) {
+              s.selected += 1;
+              if (node.outputMode === 'structure-only') {
+                s.structureOnlySelected += 1;
+                s.structureOnlySavedBytes += rawBytes;
+                s.structureOnlySavedTokens += fileBaseTokens;
+              } else {
+                s.fullSelected += 1;
+                s.selectedBaseBytes += rawBytes;
+                s.selectedActiveBytes += activeBytes;
+                s.selectedBaseTokens += fileBaseTokens;
+                if (baseExact === null) s.isSelectedBaseExact = false;
+                s.selectedActiveTokens += fileActiveTokens;
+                if (activeExact === null) s.isSelectedActiveExact = false;
+                if (meaningfulOpt) s.optimizedFilesCount += 1;
               }
             }
           }
         }
+        currParentId = dirNode.parentId;
       }
     }
 
     return stats;
-  }, [nodes, realTokenMap, optimizedBytesMap, localFilters?.isOptimizationEnabled]);
+  }, [
+    nodes,
+    baseMetricsMap,
+    optimizedMetricsMap,
+    appliedOptimizationHash,
+    localFilters?.isOptimizationEnabled,
+  ]);
 
   const sortedAndFilteredNodes = useMemo(() => {
     const baseFiltered = nodes.filter(n => {
@@ -290,6 +383,39 @@ export function FileBrowser() {
       }
     }
 
+    const optActive =
+      (localFilters?.isOptimizationEnabled ?? false) &&
+      appliedOptimizationHash !== 'none';
+
+    const getFileTokens = (n: FileNode): [number, number] => {
+      const baseEntry = baseMetricsMap[n.id];
+      const rawBytes = baseEntry?.bytes ?? n.sizeBytes;
+      const baseTok =
+        baseEntry?.exactTokens != null
+          ? baseEntry.exactTokens
+          : estimateTokenCount(rawBytes);
+
+      if (n.isIgnored || !n.isSelected) {
+        return [0, baseTok];
+      }
+
+      // Preserve position in hierarchy when marked structure-only
+      if (n.outputMode === 'structure-only') {
+        return [baseTok, baseTok];
+      }
+
+      const optEntry = optimizedMetricsMap[n.id];
+      const hasValidOpt =
+        optActive &&
+        optEntry !== undefined &&
+        optEntry.configHash === appliedOptimizationHash;
+      const activeTok = hasValidOpt
+        ? (optEntry.exactTokens ?? estimateTokenCount(optEntry.bytes))
+        : baseTok;
+
+      return [activeTok, baseTok];
+    };
+
     for (const children of childrenMap.values()) {
       children.sort((a, b) => {
         if (validRegex) {
@@ -313,9 +439,31 @@ export function FileBrowser() {
         let result = 0;
         if (sortBy === 'name') {
           result = a.name.localeCompare(b.name);
+        } else if (sortBy === 'tokens') {
+          const [primA, tieA] = a.isDirectory
+            ? [
+                (folderStats[a.relativePath]?.selectedActiveTokens ?? 0) +
+                  (folderStats[a.relativePath]?.structureOnlySavedTokens ?? 0),
+                folderStats[a.relativePath]?.totalEligibleTokens ?? 0,
+              ]
+            : getFileTokens(a);
+          const [primB, tieB] = b.isDirectory
+            ? [
+                (folderStats[b.relativePath]?.selectedActiveTokens ?? 0) +
+                  (folderStats[b.relativePath]?.structureOnlySavedTokens ?? 0),
+                folderStats[b.relativePath]?.totalEligibleTokens ?? 0,
+              ]
+            : getFileTokens(b);
+          result = primA - primB;
+          if (result === 0) result = tieA - tieB;
+          if (result === 0) result = a.name.localeCompare(b.name);
         } else {
-          const valA = a.isDirectory ? (folderStats[a.relativePath]?.sizeBytes || 0) : a.sizeBytes;
-          const valB = b.isDirectory ? (folderStats[b.relativePath]?.sizeBytes || 0) : b.sizeBytes;
+          const valA = a.isDirectory
+            ? (folderStats[a.relativePath]?.eligibleSizeBytes || 0)
+            : a.sizeBytes;
+          const valB = b.isDirectory
+            ? (folderStats[b.relativePath]?.eligibleSizeBytes || 0)
+            : b.sizeBytes;
           result = valA - valB;
           if (result === 0) result = a.name.localeCompare(b.name);
         }
@@ -345,7 +493,12 @@ export function FileBrowser() {
     traverse(null);
     return result;
 
-  }, [nodes, searchTerm, localFilters?.showGloballyIgnored, localFilters?.showLocallyIgnored, localFilters?.showEmptyFolders, sortBy, sortDir, sortFolders, sortRegex, folderStats]);
+  }, [nodes, searchTerm, localFilters?.showGloballyIgnored, localFilters?.showLocallyIgnored, localFilters?.showEmptyFolders, localFilters?.isOptimizationEnabled, sortBy, sortDir, sortFolders, sortRegex, folderStats, baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash]);
+
+  const outputModeOverrides = localFilters?.outputModeOverrides ?? {};
+  const overrideEntries = Object.entries(outputModeOverrides);
+  const overrideCount = overrideEntries.length;
+  const globalStats = getStats();
 
   const sortByOptions: SelectOption[] = [
     { value: 'none', label: t('browser.sortNone'), icon: <IconBan size={16} /> },
@@ -426,6 +579,25 @@ export function FileBrowser() {
                   <Button variant="secondary" onClick={toggleSearch} data-tooltip={t('common.search')} data-tooltip-pos="bottom">
                     <IconSearch size={18} color={isSearchVisible ? 'var(--accent-primary)' : 'var(--text-primary)'} />
                   </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={toggleStructurePanel}
+                    data-tooltip={t('structureOnly.toolbarTooltip')}
+                    data-tooltip-pos="bottom"
+                    className={`structure-toolbar-btn ${isStructurePanelVisible || overrideCount > 0 ? 'has-active' : ''}`}
+                  >
+                    <IconBinaryTree
+                      size={18}
+                      color={
+                        isStructurePanelVisible || overrideCount > 0
+                          ? 'var(--structure-only)'
+                          : 'var(--text-primary)'
+                      }
+                    />
+                    {overrideCount > 0 && (
+                      <span className="structure-toolbar-badge">{overrideCount}</span>
+                    )}
+                  </Button>
                   <Button variant="secondary" onClick={selectAll} data-tooltip={t('browser.selectAll')} data-tooltip-pos="bottom">
                     <IconChecks size={18} />
                   </Button>
@@ -456,7 +628,80 @@ export function FileBrowser() {
               )}
             </div>
             
-            <div className={`tools-panel-slide ${(isSearchVisible || isSortVisible) && nodes.length > 0 ? 'visible' : ''}`}>
+            <div className={`tools-panel-slide ${(isSearchVisible || isSortVisible || isStructurePanelVisible) && nodes.length > 0 ? 'visible' : ''}`}>
+              {isStructurePanelVisible && (
+                <div className="structure-panel-wrapper">
+                  <div className="structure-panel-header">
+                    <div className="structure-panel-title">
+                      <IconBinaryTree size={16} color="var(--structure-only)" />
+                      <span>{t('structureOnly.title')}</span>
+                    </div>
+                    {overrideCount > 0 && (
+                      <Button
+                        variant="secondary"
+                        onClick={clearAllOutputModeOverrides}
+                        style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                      >
+                        {t('structureOnly.clearAll')} ({overrideCount})
+                      </Button>
+                    )}
+                  </div>
+                  <p className="structure-panel-desc">{t('structureOnly.desc')}</p>
+
+                  {overrideCount === 0 ? (
+                    <div className="structure-panel-empty">{t('structureOnly.emptyRules')}</div>
+                  ) : (
+                    <div className="structure-rules-chips">
+                      {overrideEntries.map(([path, mode]) => (
+                        <div
+                          key={path}
+                          className={`structure-rule-chip ${mode === 'structure-only' ? 'is-meta' : 'is-full'}`}
+                          onClick={() => handleRevealRulePath(path)}
+                          title={path}
+                        >
+                          <span className="structure-rule-chip-tag">
+                            {mode === 'structure-only'
+                              ? t('structureOnly.badgeMeta')
+                              : t('structureOnly.badgeFullOverride')}
+                          </span>
+                          <span className="structure-rule-chip-path">{path}</span>
+                          <button
+                            type="button"
+                            className="structure-rule-chip-remove"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              clearNodeOutputModeOverride(path);
+                            }}
+                            aria-label="Remove rule"
+                          >
+                            <IconX size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="structure-panel-footer">
+                    <button
+                      type="button"
+                      className={`structure-click-mark-btn ${isClickToMarkMode ? 'active' : ''}`}
+                      onClick={() => setIsClickToMarkMode((v) => !v)}
+                    >
+                      <IconClick size={14} />
+                      <span>{t('structureOnly.clickToMark')}: {isClickToMarkMode ? 'ON' : 'OFF'}</span>
+                    </button>
+                    {globalStats.structureOnlyFiles > 0 && (
+                      <span className="structure-panel-impact">
+                        {globalStats.structureOnlyFiles} meta-only (-
+                        {globalStats.structureOnlySavedTokens >= 1000
+                          ? `${(globalStats.structureOnlySavedTokens / 1000).toFixed(1)}k`
+                          : globalStats.structureOnlySavedTokens}{' '}
+                        tok)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               {isSearchVisible && (
                 <div className="search-input-wrapper">
                   <IconSearch size={16} className="search-input-icon" color="var(--text-primary)" />
@@ -546,6 +791,8 @@ export function FileBrowser() {
                     folderStat={node.isDirectory ? folderStats[node.relativePath] : undefined}
                     onToggleExpand={toggleExpand}
                     onToggleSelect={toggleSelection}
+                    onToggleStructureOnly={handleToggleStructureOnly}
+                    isClickToMarkMode={isClickToMarkMode}
                     onContextMenu={handleContextMenu}
                   />
                 )}

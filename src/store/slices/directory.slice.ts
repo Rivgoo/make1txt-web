@@ -10,6 +10,8 @@ import { PREDEFINED_OPTIMIZATION_RULES } from '@/core/constants/optimization.con
 import { DEFAULT_GLOBAL_SETTINGS } from '../constants';
 import { IdeSyncService } from '@/core/services/IdeSyncService';
 import { reconcileFileTree } from '@/core/utils/reconcile.utils';
+import { pruneOrphanedOutputOverrides } from '@/core/utils/output-mode.utils';
+import { computeOptimizationHash } from '@/core/utils/optimization.utils';
 
 export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlice> = (set, get) => ({
   nodes: [],
@@ -87,6 +89,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         isGloballyIgnored: false,
         isLocallyIgnored: false,
         isExpanded: existingRoot ? existingRoot.isExpanded : true,
+        outputMode: 'full',
+        outputModeSource: 'default',
+        outputModeAnchorPath: null,
       };
 
       const rawChildren = await readDirectoryRecursively(
@@ -130,6 +135,11 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       const currentCsChoice = get().localFilters?.enableCSharpAnalysis ?? true;
       const finalEnableCSharp = hasCsFiles ? currentCsChoice : false;
 
+      const prunedOverrides = pruneOrphanedOutputOverrides(
+        get().localFilters.outputModeOverrides ?? {},
+        reconciledNodes
+      );
+
       const nextState = {
         ...get(),
         nodes: reconciledNodes,
@@ -137,6 +147,7 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         localFilters: {
           ...get().localFilters,
           extensions: extMap,
+          outputModeOverrides: prunedOverrides,
           enableCSharpAnalysis: finalEnableCSharp
         },
         isResyncing: false,
@@ -222,12 +233,18 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       const currentCsChoice = get().localFilters?.enableCSharpAnalysis ?? true;
       const finalEnableCSharp = hasCsFiles ? currentCsChoice : false;
 
+      const prunedOverrides = pruneOrphanedOutputOverrides(
+        get().localFilters.outputModeOverrides ?? {},
+        reconciledNodes
+      );
+
       const nextState = {
         ...get(),
         nodes: reconciledNodes,
         localFilters: {
           ...get().localFilters,
           extensions: extMap,
+          outputModeOverrides: prunedOverrides,
           enableCSharpAnalysis: finalEnableCSharp
         },
         isResyncing: false,
@@ -253,8 +270,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       scannedFilesCount: 0, 
       previewNode: null, 
       sessionFileName: null,
-      realTokenMap: {},
-      optimizedBytesMap: {},
+      baseMetricsMap: {},
+      optimizedMetricsMap: {},
+      appliedOptimizationHash: 'none',
       needsManualTokenization: false,
       sourceMode: 'ide-sync',
       rootHandle: null,
@@ -282,6 +300,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         isGloballyIgnored: false,
         isLocallyIgnored: false,
         isExpanded: true,
+        outputMode: 'full',
+        outputModeSource: 'default',
+        outputModeAnchorPath: null,
       };
       
       rawNodes.push(rootNode);
@@ -313,6 +334,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
               isGloballyIgnored: false,
               isLocallyIgnored: false,
               isExpanded: false,
+              outputMode: 'full',
+              outputModeSource: 'default',
+              outputModeAnchorPath: null,
             };
             rawNodes.push(dirNode);
             dirMap.set(currentPath, dirNode);
@@ -336,6 +360,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
           isGloballyIgnored: false,
           isLocallyIgnored: false,
           isExpanded: false,
+          outputMode: 'full',
+          outputModeSource: 'default',
+          outputModeAnchorPath: null,
         });
       });
 
@@ -390,8 +417,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       previewNode: null, 
       sessionFileName: null,
       abortController: controller,
-      realTokenMap: {},
-      optimizedBytesMap: {},
+      baseMetricsMap: {},
+      optimizedMetricsMap: {},
+      appliedOptimizationHash: 'none',
       needsManualTokenization: false,
       sourceMode: 'browser-fs',
       syncProjectName: null
@@ -443,6 +471,9 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
         isGloballyIgnored: false,
         isLocallyIgnored: false,
         isExpanded: true,
+        outputMode: 'full',
+        outputModeSource: 'default',
+        outputModeAnchorPath: null,
       };
 
       const rawChildren = await readDirectoryRecursively(
@@ -471,6 +502,7 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
 
         localFiltersToApply = {
           customPatterns: savedFilters.customPatterns,
+          outputModeOverrides: savedFilters.outputModeOverrides ?? {},
           showGloballyIgnored: savedFilters.showGloballyIgnored ?? false,
           showLocallyIgnored: savedFilters.showLocallyIgnored ?? true,
           showEmptyFolders: savedFilters.showEmptyFolders ?? false,
@@ -486,22 +518,30 @@ export const createDirectorySlice: StateCreator<FileStore, [], [], DirectorySlic
       const currentChoice = get().localFilters?.enableCSharpAnalysis ?? true;
       const finalEnableCSharp = hasCsFiles ? (localFiltersToApply.enableCSharpAnalysis ?? currentChoice) : false;
 
+      const resolvedOptEnabled = localFiltersToApply.isOptimizationEnabled ?? false;
+      const resolvedOptRules = localFiltersToApply.optimizationRules ?? PREDEFINED_OPTIMIZATION_RULES;
+      const initialAppliedHash = resolvedOptEnabled
+        ? computeOptimizationHash(true, resolvedOptRules)
+        : 'none';
+
       const initialState = { 
         ...get(),
         rootHandle: handle,
         gitignoreRegexes: gitRegexes,
         isRestoredFromProfile: isRestored,
+        appliedOptimizationHash: initialAppliedHash,
         localFilters: {
           extensions: extMap,
           customPatterns: localFiltersToApply.customPatterns ?? [],
+          outputModeOverrides: localFiltersToApply.outputModeOverrides ?? {},
           showGloballyIgnored: localFiltersToApply.showGloballyIgnored ?? false,
           showLocallyIgnored: localFiltersToApply.showLocallyIgnored ?? true,
           showEmptyFolders: localFiltersToApply.showEmptyFolders ?? false,
           generateTree: localFiltersToApply.generateTree ?? true,
           treeIncludeIgnored: localFiltersToApply.treeIncludeIgnored ?? false,
-          isOptimizationEnabled: localFiltersToApply.isOptimizationEnabled ?? false,
+          isOptimizationEnabled: resolvedOptEnabled,
           isOptimizationDirty: localFiltersToApply.isOptimizationDirty ?? false,
-          optimizationRules: localFiltersToApply.optimizationRules ?? PREDEFINED_OPTIMIZATION_RULES,
+          optimizationRules: resolvedOptRules,
           enableCSharpAnalysis: finalEnableCSharp
         },
         nodes: rawNodes,

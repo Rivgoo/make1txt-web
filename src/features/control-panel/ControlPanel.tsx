@@ -8,7 +8,7 @@ import {
 } from '@tabler/icons-react';
 import { Button } from '@/shared/ui/Button/Button';
 import { useFileStore } from '@/store/useFileStore';
-import { formatFileSize, hasMeaningfulOptimization } from '@/core/utils/stats.utils';
+import { formatFileSize, isMeaningfullyOptimized } from '@/core/utils/stats.utils';
 import { useToast } from '@/shared/context/useToast';
 import { QuickSettings } from './components/QuickSettings';
 import { AdvancedSettingsModal } from './components/AdvancedSettingsModal';
@@ -33,7 +33,7 @@ export function ControlPanel() {
   const { 
     fetchProfiles, getStats, isLoading, isTokenizing, tokenizationProgress, 
     localFilters, globalSettings, nodes, loadDirectory, checkProfileChanges, 
-    hasUnsavedProfileChanges, saveActiveProfileChanges 
+    hasUnsavedProfileChanges, saveActiveProfileChanges, appliedOptimizationHash
   } = useFileStore();
   
   const { showToast } = useToast();
@@ -94,7 +94,18 @@ export function ControlPanel() {
     }
   };
 
-  const hasSavings = localFilters?.isOptimizationEnabled && hasMeaningfulOptimization(stats.totalSizeBytes, stats.totalOptimizedBytes);
+  const optActive =
+    (localFilters?.isOptimizationEnabled ?? false) &&
+    appliedOptimizationHash !== 'none';
+  const hasSavings =
+    optActive &&
+    isMeaningfullyOptimized(
+      stats.totalSizeBytes,
+      stats.totalOptimizedBytes,
+      stats.baseTokens,
+      stats.tokens
+    );
+  const hasStructureSavings = stats.structureOnlyFiles > 0;
   const savedTokens = stats.baseTokens - stats.tokens;
 
   // Don't show save button while scanning/tokenizing
@@ -172,10 +183,20 @@ export function ControlPanel() {
               <div className="stat-box">
                 <span className="stat-label"><IconFiles size={14}/> {t('stats.selected')}</span>
                 <span className="stat-value">{stats.selectedFiles} <small>/ {stats.totalFiles}</small></span>
+                {hasStructureSavings && (
+                  <span className="stat-subtext">
+                    ({stats.fullSelectedFiles} full · <span className="stat-cyan">{stats.structureOnlyFiles} meta</span>)
+                  </span>
+                )}
               </div>
               <div className="stat-box">
                 <span className="stat-label"><IconWeight size={14}/> {t('stats.size')}</span>
-                <span className="stat-value">{formatFileSize(stats.totalSizeBytes)}</span>
+                <span className="stat-value">{formatFileSize(stats.totalOptimizedBytes)}</span>
+                {hasStructureSavings && (
+                  <span className="stat-subtext stat-cyan">
+                    -{formatFileSize(stats.structureOnlySavedBytes)} meta-only
+                  </span>
+                )}
               </div>
               
               {hasSavings && (
@@ -192,36 +213,41 @@ export function ControlPanel() {
                 <span className="stat-value">{stats.totalWords.toLocaleString()}</span>
               </div>
 
-              {hasSavings ? (
-                <>
-                  <div className="stat-box">
-                    <span className="stat-label" data-tooltip={stats.isExactTokens ? t('stats.exact') : t('stats.estimated')} data-tooltip-pos="top">
-                      <IconCpu size={14}/> {t('stats.tokens')} {isTokenizing && `(${tokenizationProgress}%)`}
-                    </span>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span className="stat-value accent">
-                        {!stats.isExactTokens && '~'}{stats.tokens.toLocaleString()}
-                      </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
-                        {!stats.isExactTokens && '~'}{stats.baseTokens.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="stat-box">
-                    <span className="stat-label"><IconWand size={14}/> {t('optimization.tokensSaved')}</span>
-                    <span className="stat-value success">
-                      -{savedTokens.toLocaleString()}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div className="stat-box">
-                  <span className="stat-label" data-tooltip={stats.isExactTokens ? t('stats.exact') : t('stats.estimated')} data-tooltip-pos="top">
-                    <IconCpu size={14}/> {t('stats.tokens')} {isTokenizing && `(${tokenizationProgress}%)`}
-                  </span>
+              <div className="stat-box">
+                <span className="stat-label" data-tooltip={stats.isExactTokens ? t('stats.exact') : t('stats.estimated')} data-tooltip-pos="top">
+                  <IconCpu size={14}/> {t('stats.tokens')} {isTokenizing && `(${tokenizationProgress}%)`}
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span className="stat-value accent">
-                    {!stats.isExactTokens && '~'}{stats.baseTokens.toLocaleString()}
+                    {!stats.isExactTokens && '~'}{stats.tokens.toLocaleString()}
                   </span>
+                  {hasSavings && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+                      {!stats.isBaseExactTokens && '~'}{stats.baseTokens.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {(hasSavings || hasStructureSavings) && (
+                <div className="stat-box">
+                  <span className="stat-label"><IconWand size={14}/> {t('optimization.tokensSaved')}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {hasSavings && (
+                      <span className={`stat-value ${savedTokens >= 0 ? 'success' : 'warning'}`}>
+                        {savedTokens > 0
+                          ? `-${savedTokens.toLocaleString()}`
+                          : savedTokens < 0
+                            ? `+${Math.abs(savedTokens).toLocaleString()}`
+                            : '0'}
+                      </span>
+                    )}
+                    {hasStructureSavings && (
+                      <span className="stat-subtext stat-cyan" style={{ fontWeight: 600 }}>
+                        -{stats.structureOnlySavedTokens.toLocaleString()} (meta-only)
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 

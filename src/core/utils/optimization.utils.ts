@@ -2,6 +2,20 @@ import type { OptimizationRule, OptimizationResult } from '../types/optimization
 
 const STRING_LITERAL_REGEX = '("([^"\\\\]|\\\\.)*"|\'([^\'\\\\]|\\\\.)*\'|`([^`\\\\]|\\\\.)*`)';
 
+const textEncoder = new TextEncoder();
+
+export function computeOptimizationHash(
+  isEnabled: boolean,
+  rules: OptimizationRule[]
+): string {
+  if (!isEnabled) return 'none';
+  const active = rules.filter((r) => r.isActive);
+  if (active.length === 0) return 'none';
+  return JSON.stringify(
+    active.map((r) => [r.pattern, r.flags, r.replacement])
+  );
+}
+
 export function compileSafeRegex(rule: OptimizationRule): RegExp {
   const safePattern = `${STRING_LITERAL_REGEX}|(${rule.pattern})`;
   return new RegExp(safePattern, rule.flags);
@@ -22,7 +36,7 @@ export function optimizeText(
   previewDiff = false
 ): OptimizationResult {
   const activeRules = rules.filter(r => r.isActive);
-  const originalBytes = new Blob([text]).size;
+  const originalBytes = textEncoder.encode(text).byteLength;
 
   if (activeRules.length === 0) {
     return {
@@ -67,13 +81,13 @@ export function optimizeText(
     return {
       optimizedText: html,
       originalBytes,
-      optimizedBytes: new Blob([processedText]).size
+      optimizedBytes: textEncoder.encode(processedText).byteLength
     };
   }
 
   return {
     optimizedText: processedText,
     originalBytes,
-    optimizedBytes: new Blob([processedText]).size
+    optimizedBytes: textEncoder.encode(processedText).byteLength
   };
 }

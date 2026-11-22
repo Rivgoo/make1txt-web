@@ -136,6 +136,7 @@ export const en = {
       vertical: 'Vertical',
       space: 'Space',
       ignoredMark: 'Ignored item mark',
+      structureOnlyMark: 'Structure-only folder mark',
       structureWrapper: 'Wrapper template (use {{tree}})',
       previewStructure: 'Structure Preview:',
       fileDelimiterFormat: 'Block Separator Style',
@@ -192,6 +193,7 @@ export const en = {
     showLocallyIgnored: 'Show locally ignored',
     showEmptyFolders: 'Show empty folders',
     generateTree: 'Generate file structure',
+    generateStructure: 'Generate file structure',
     structureIncludeIgnored: 'Structure: include ignored',
     enableCSharpAnalysis: 'C# Meta Analysis',
     tokenWarningTitle: 'Large Project Detected',
@@ -251,5 +253,36 @@ export const en = {
     errorDesc: 'Could not fetch data from your IDE. The server might have timed out or the token is invalid.',
     goHome: 'Go to Home',
     successMessage: 'Workspace synced successfully.'
+  },
+  preview: {
+    original: 'Original',
+    optimized: 'Optimized'
+  },
+  structureOnly: {
+    title: 'Structure & Meta-Only Control',
+    toolbarTooltip: 'Manage Structure & Meta-Only folders',
+    desc: 'Marked folders participate in C# meta-analysis and appear in the tree, but their file bodies are omitted to save tokens.',
+    badgeMeta: 'META',
+    badgeTree: 'TREE',
+    badgeFullOverride: 'FULL',
+    setAction: 'Structure & Meta Only',
+    restoreAction: 'Restore Full Content',
+    overrideFullAction: 'Override: Include Full Content',
+    resetOverrideAction: 'Reset Override (Inherit Meta-Only)',
+    inheritedFrom: 'Inherited from {{path}}',
+    clickToMark: 'Click-to-Mark Folders',
+    clearAll: 'Clear All',
+    emptyRules: 'No folders marked as Structure-Only. Click the tree icon on any folder to save tokens while keeping metadata.',
+    autoEnabledTree: 'Directory structure was automatically enabled for Structure-Only folders.',
+    treeDisabledWarning: '{{count}} files are in Structure-Only mode and will be omitted while Directory Structure is disabled.',
+    reEnableStructure: 'Re-enable Structure',
+    outputModeLabel: 'Output Mode',
+    modeFull: 'Full Content',
+    modeMetaDirect: 'Structure & Meta Only (Direct)',
+    modeMetaInherited: 'Structure & Meta Only (Inherited)',
+    savedViaMeta: 'Saved via Structure-Only',
+    activeBanner: '{{folders}} folders in Structure-Only mode ({{files}} files)',
+    omittedFromBody: 'omitted from body',
+    tokensOmittedTooltip: '{{count}} tokens omitted via Structure-Only'
   }
 };

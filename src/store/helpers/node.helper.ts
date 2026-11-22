@@ -1,4 +1,11 @@
-import type { FileNode, GlobalSettings, LocalFilters, ExtensionStat } from '@/core/types/file.types';
+import type {
+  FileNode,
+  GlobalSettings,
+  LocalFilters,
+  ExtensionStat,
+  OutputMode,
+  OutputModeSource,
+} from '@/core/types/file.types';
 import { isPathGloballyIgnored, compileGlobToRegex } from '@/core/services/IgnoreService';
 import { getFileExtension } from '@/core/utils/stats.utils';
 
@@ -43,6 +50,8 @@ export function computeNodes(
   const { globalSettings, localFilters, gitignoreRegexes, compiledCustomRegexes } = state;
   const globallyIgnoredDirIds = new Set<string>();
   const locallyIgnoredDirIds = new Set<string>();
+  const overrides = localFilters.outputModeOverrides ?? {};
+  const resolvedModeMap = new Map<string, { mode: OutputMode; anchorPath: string | null }>();
 
   return state.nodes.map(node => {
     let isGloballyIgnored = false;
@@ -100,7 +109,40 @@ export function computeNodes(
       }
     }
 
-    return { ...node, isGloballyIgnored, isLocallyIgnored, isIgnored, isSelected };
+    // O(N) top-down longest-prefix outputMode resolution
+    const parentModeState = node.parentId
+      ? (resolvedModeMap.get(node.parentId) ?? { mode: 'full' as OutputMode, anchorPath: null })
+      : { mode: 'full' as OutputMode, anchorPath: null };
+
+    const directOverride = overrides[node.relativePath];
+    let outputMode: OutputMode;
+    let outputModeSource: OutputModeSource;
+    let outputModeAnchorPath: string | null;
+
+    if (directOverride !== undefined) {
+      outputMode = directOverride;
+      outputModeSource = 'direct';
+      outputModeAnchorPath = node.relativePath;
+    } else {
+      outputMode = parentModeState.mode;
+      outputModeSource = parentModeState.anchorPath ? 'inherited' : 'default';
+      outputModeAnchorPath = parentModeState.anchorPath;
+    }
+
+    if (node.isDirectory) {
+      resolvedModeMap.set(node.id, { mode: outputMode, anchorPath: outputModeAnchorPath });
+    }
+
+    return {
+      ...node,
+      isGloballyIgnored,
+      isLocallyIgnored,
+      isIgnored,
+      isSelected,
+      outputMode,
+      outputModeSource,
+      outputModeAnchorPath,
+    };
   });
 }
 

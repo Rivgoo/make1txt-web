@@ -1,7 +1,15 @@
 ﻿import type { OptimizationRule } from './optimization.types';
+import type { OutputMode } from './file.types';
+
+export interface GeneratorFileItem {
+  handle: FileSystemFileHandle | null;
+  path: string;
+  content?: string;
+  outputMode: OutputMode;
+}
 
 export interface WorkerInput {
-  files: { handle: FileSystemFileHandle | null; path: string; content?: string }[];
+  files: GeneratorFileItem[];
   template: string;
   maxFileSizeBytes: number;
   isOptimizationEnabled?: boolean;
@@ -14,21 +22,44 @@ export type WorkerOutput =
   | { type: 'done'; blob: Blob; metaMap?: Record<string, string> }
   | { type: 'error'; error: string };
 
-export interface TokenizerInput {
-  files: { id: string; handle: FileSystemFileHandle | null; content?: string; sizeBytes: number }[];
-  isOptimizationEnabled?: boolean;
-  optimizationRules?: OptimizationRule[];
-  skipTiktoken?: boolean;
+export interface BaseFileMetrics {
+  bytes: number;
+  exactTokens: number | null;
 }
 
-export interface TokenizerResult {
-  tokens: number;
-  originalBytes: number;
-  optimizedBytes: number;
-  skippedTiktoken: boolean;
+export interface OptimizedFileMetrics {
+  configHash: string;
+  bytes: number;
+  exactTokens: number | null;
+}
+
+export interface TokenizerFileItem {
+  id: string;
+  handle: FileSystemFileHandle | null;
+  content?: string;
+  sizeBytes: number;
+  needsBaseBytes: boolean;
+  needsBaseTokens: boolean;
+  needsOptBytes: boolean;
+  needsOptTokens: boolean;
+}
+
+export interface TokenizerInput {
+  runId: number;
+  configHash: string;
+  files: TokenizerFileItem[];
+  isOptimizationEnabled: boolean;
+  optimizationRules: OptimizationRule[];
+}
+
+export interface TokenizerFileResult {
+  baseBytes?: number;
+  baseExactTokens?: number | null;
+  optBytes?: number;
+  optExactTokens?: number | null;
 }
 
 export type TokenizerOutput =
-  | { type: 'progress'; progress: number }
-  | { type: 'result'; results: Record<string, TokenizerResult> }
-  | { type: 'error'; error: string };
+  | { type: 'chunk'; runId: number; progress: number; results: Record<string, TokenizerFileResult> }
+  | { type: 'done'; runId: number }
+  | { type: 'error'; runId: number; error: string };

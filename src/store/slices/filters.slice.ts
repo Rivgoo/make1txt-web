@@ -1,13 +1,15 @@
 ﻿import type { StateCreator } from 'zustand';
 import type { FileStore, FiltersSlice } from '../store.types';
-import type { ExtensionStat } from '@/core/types/file.types';
+import type { ExtensionStat, OutputMode } from '@/core/types/file.types';
 import { computeNodes, recompileAndRecalculate } from '../helpers/node.helper';
 import { PREDEFINED_OPTIMIZATION_RULES } from '@/core/constants/optimization.constants';
+import { setOutputModeOverride } from '@/core/utils/output-mode.utils';
 
 export const createFiltersSlice: StateCreator<FileStore, [], [], FiltersSlice> = (set, get) => ({
   localFilters: { 
     extensions: {}, 
     customPatterns: [], 
+    outputModeOverrides: {},
     showGloballyIgnored: false,
     showLocallyIgnored: true,
     showEmptyFolders: false,
@@ -159,5 +161,98 @@ export const createFiltersSlice: StateCreator<FileStore, [], [], FiltersSlice> =
       }
     });
     get().evaluateTokenization();
-  }
+  },
+
+  setNodeOutputMode: (relativePath, mode) => {
+    set((state) => {
+      const currentOverrides = state.localFilters.outputModeOverrides ?? {};
+      const nextOverrides = setOutputModeOverride(currentOverrides, relativePath, mode);
+
+      // Auto-Guard 1: Auto-enable generateTree when marking structure-only
+      const generateTree =
+        mode === 'structure-only' && !state.localFilters.generateTree
+          ? true
+          : state.localFilters.generateTree;
+
+      const newFilters = {
+        ...state.localFilters,
+        outputModeOverrides: nextOverrides,
+        generateTree,
+      };
+
+      // Auto-Guard 2: If marking a folder with 0 selected non-ignored descendants as structure-only,
+      // auto-select its non-ignored descendants so the action has immediate observable effect.
+      let updatedNodes = state.nodes;
+      if (mode === 'structure-only') {
+        const target = state.nodes.find((n) => n.relativePath === relativePath);
+        if (target && target.isDirectory && !target.isIgnored) {
+          const prefix = `${relativePath}/`;
+          const hasSelectedDescendant = state.nodes.some(
+            (n) =>
+              !n.isDirectory &&
+              !n.isIgnored &&
+              n.isSelected &&
+              n.relativePath.startsWith(prefix)
+          );
+          if (!hasSelectedDescendant) {
+            updatedNodes = state.nodes.map((n) => {
+              if (n.isIgnored) return n;
+              if (n.relativePath === relativePath || n.relativePath.startsWith(prefix)) {
+                return { ...n, isSelected: true };
+              }
+              return n;
+            });
+          }
+        }
+      }
+
+      const tempState = { ...state, nodes: updatedNodes, localFilters: newFilters };
+      return {
+        localFilters: newFilters,
+        nodes: computeNodes(tempState),
+      };
+    });
+    get().evaluateTokenization();
+  },
+
+  toggleNodeOutputMode: (nodeId) => {
+    const target = get().nodes.find((n) => n.id === nodeId);
+    if (!target || target.isIgnored) return;
+    const desiredMode: OutputMode =
+      target.outputMode === 'structure-only' ? 'full' : 'structure-only';
+    get().setNodeOutputMode(target.relativePath, desiredMode);
+  },
+
+  clearNodeOutputModeOverride: (relativePath) => {
+    const state = get();
+    const overrides = state.localFilters.outputModeOverrides ?? {};
+    // Determine parent's inherited mode and pass it to setNodeOutputMode so self + redundant children prune cleanly
+    let parentMode: OutputMode = 'full';
+    const parts = relativePath.split('/');
+    parts.pop();
+    while (parts.length > 0) {
+      const anc = parts.join('/');
+      if (overrides[anc] !== undefined) {
+        parentMode = overrides[anc];
+        break;
+      }
+      parts.pop();
+    }
+    get().setNodeOutputMode(relativePath, parentMode);
+  },
+
+  clearAllOutputModeOverrides: () => {
+    set((state) => {
+      const newFilters = {
+        ...state.localFilters,
+        outputModeOverrides: {},
+      };
+      const tempState = { ...state, localFilters: newFilters };
+      return {
+        localFilters: newFilters,
+        nodes: computeNodes(tempState),
+      };
+    });
+    get().evaluateTokenization();
+  },
 });

@@ -1,71 +1,98 @@
-import { getEncoding } from 'js-tiktoken';
-import type { TokenizerInput, TokenizerOutput, TokenizerResult } from '../types/worker.types';
+import { getEncoding, type Tiktoken } from 'js-tiktoken';
+import type { TokenizerInput, TokenizerOutput, TokenizerFileResult } from '../types/worker.types';
 import { optimizeText } from '../utils/optimization.utils';
 
-const PROGRESS_BATCH = 20;
+const CHUNK_SIZE = 20;
+const textEncoder = new TextEncoder();
+
+// Persistent singleton encoder inside warm worker (avoids ~200ms BPE table reload per click)
+let cachedEncoder: Tiktoken | null = null;
+function getEncoder(): Tiktoken {
+  if (!cachedEncoder) {
+    cachedEncoder = getEncoding('cl100k_base');
+  }
+  return cachedEncoder;
+}
 
 self.onmessage = async (e: MessageEvent<TokenizerInput>) => {
-  const { files, isOptimizationEnabled, optimizationRules, skipTiktoken } = e.data;
-  
+  const { runId, files, isOptimizationEnabled, optimizationRules } = e.data;
+
   if (!files || files.length === 0) {
-    self.postMessage({ type: 'result', results: {} } as TokenizerOutput);
+    self.postMessage({ type: 'done', runId } as TokenizerOutput);
     return;
   }
 
   try {
-    const enc = skipTiktoken ? null : getEncoding('cl100k_base');
-    const results: Record<string, TokenizerResult> = {};
+    const needsAnyTiktoken = files.some((f) => f.needsBaseTokens || f.needsOptTokens);
+    const enc = needsAnyTiktoken ? getEncoder() : null;
+
+    let batchResults: Record<string, TokenizerFileResult> = {};
     let processed = 0;
 
     for (const item of files) {
+      const res: TokenizerFileResult = {};
       try {
-        let text = '';
-        let originalBytes = item.sizeBytes || 0;
+        let rawText = '';
+        let rawBytes = item.sizeBytes || 0;
 
         if (item.content !== undefined) {
-          text = item.content;
+          rawText = item.content;
+          rawBytes = textEncoder.encode(rawText).byteLength;
         } else if (item.handle) {
           const file = await item.handle.getFile();
-          text = await file.text();
-          originalBytes = file.size;
+          rawText = await file.text();
+          rawBytes = file.size;
         }
 
-        let optimizedBytes = originalBytes;
-
-        if (isOptimizationEnabled && optimizationRules && optimizationRules.length > 0) {
-          const optResult = optimizeText(text, optimizationRules, false);
-          text = optResult.optimizedText;
-          optimizedBytes = optResult.optimizedBytes;
+        if (item.needsBaseBytes) {
+          res.baseBytes = rawBytes;
+        }
+        if (item.needsBaseTokens) {
+          res.baseExactTokens = enc ? enc.encode(rawText).length : null;
         }
 
-        let tokens = 0;
-        if (!skipTiktoken && enc) {
-          tokens = enc.encode(text).length;
+        if (item.needsOptBytes || item.needsOptTokens) {
+          if (isOptimizationEnabled && optimizationRules.length > 0) {
+            const optResult = optimizeText(rawText, optimizationRules, false);
+            if (item.needsOptBytes) res.optBytes = optResult.optimizedBytes;
+            if (item.needsOptTokens) {
+              res.optExactTokens = enc ? enc.encode(optResult.optimizedText).length : null;
+            }
+          } else {
+            if (item.needsOptBytes) res.optBytes = rawBytes;
+            if (item.needsOptTokens) {
+              res.optExactTokens = res.baseExactTokens ?? (enc ? enc.encode(rawText).length : null);
+            }
+          }
         }
-        
-        results[item.id] = {
-          tokens,
-          originalBytes,
-          optimizedBytes,
-          skippedTiktoken: !!skipTiktoken
-        };
       } catch (err) {
-        results[item.id] = { tokens: 0, originalBytes: 0, optimizedBytes: 0, skippedTiktoken: !!skipTiktoken };
-        console.warn(`[Tokenizer Worker] Failed to read/tokenize file ${item.id}`, err);
+        console.warn(`[Tokenizer Worker] Failed on ${item.id}:`, err);
+        if (item.needsBaseBytes) res.baseBytes = 0;
+        if (item.needsBaseTokens) res.baseExactTokens = 0;
+        if (item.needsOptBytes) res.optBytes = 0;
+        if (item.needsOptTokens) res.optExactTokens = 0;
       }
 
+      batchResults[item.id] = res;
       processed++;
 
-      if (processed % PROGRESS_BATCH === 0 || processed === files.length) {
+      if (processed % CHUNK_SIZE === 0 || processed === files.length) {
         const progress = Math.round((processed / files.length) * 100);
-        self.postMessage({ type: 'progress', progress } as TokenizerOutput);
+        self.postMessage({
+          type: 'chunk',
+          runId,
+          progress,
+          results: batchResults,
+        } as TokenizerOutput);
+        batchResults = {};
       }
     }
 
-    self.postMessage({ type: 'result', results } as TokenizerOutput);
+    self.postMessage({ type: 'done', runId } as TokenizerOutput);
   } catch (err) {
     self.postMessage({
       type: 'error',
+      runId,
       error: err instanceof Error ? err.message : 'Tokenization failed',
     } as TokenizerOutput);
   }

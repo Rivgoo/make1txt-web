@@ -4,13 +4,13 @@ import {
   IconFolder, IconFileText, IconCircleCheck, IconCircleDashed, 
   IconWeight, IconClock, IconRoute, IconFiles, IconLoader2, IconX, 
   IconEye, IconEyeOff, IconWorld, IconMapPin, IconMapPinOff, IconCopy, IconCpu, IconWand, IconRefresh,
-  IconChecks, IconSquareX
+  IconChecks, IconSquareX, IconBinaryTree, IconArrowBackUp
 } from '@tabler/icons-react';
 import type { FileNode } from '@/core/types/file.types';
 import type { FolderStat } from '@/store/useFileStore';
 import { useFileStore } from '@/store/useFileStore';
 import { useToast } from '@/shared/context/useToast';
-import { formatFileSize, getFileExtension, estimateTokenCount } from '@/core/utils/stats.utils';
+import { formatFileSize, getFileExtension, estimateTokenCount, isMeaningfullyOptimized } from '@/core/utils/stats.utils';
 import './FileContextMenu.css';
 
 interface FileContextMenuProps {
@@ -30,7 +30,8 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
   const { t } = useTranslation();
   const { 
     toggleSelection, setDirectChildrenSelection, nodes, previewNode, setPreviewNode, globalSettings, updateGlobalSettings, 
-    localFilters, toggleExtension, toggleLocalPathIgnore, realTokenMap, optimizedBytesMap,
+    localFilters, toggleExtension, toggleLocalPathIgnore, baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash,
+    setNodeOutputMode, clearNodeOutputModeOverride,
     resyncSubtree, isResyncing
   } = useFileStore();
   
@@ -86,7 +87,12 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
           setMeta({ folderSize: size });
           setIsLoadingMeta(false);
         }
-      } else {
+      } else if (node.content !== undefined) {
+        if (isMounted) {
+          setMeta({ modified: 'IDE Sync' });
+          setIsLoadingMeta(false);
+        }
+      } else if (node.handle) {
         try {
           const file = await (node.handle as FileSystemFileHandle).getFile();
           if (isMounted) {
@@ -98,6 +104,11 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
             setMeta({ modified: t('browser.notAvailable') });
             setIsLoadingMeta(false);
           }
+        }
+      } else {
+        if (isMounted) {
+          setMeta({ modified: t('browser.notAvailable') });
+          setIsLoadingMeta(false);
         }
       }
     };
@@ -203,14 +214,58 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
     onClose();
   };
 
-  const isExactTotal = node.isDirectory ? folderStat?.exactTokens !== undefined : (realTokenMap && realTokenMap[node.id] !== undefined);
-  const tokensVal = isExactTotal 
-    ? (node.isDirectory ? folderStat!.exactTokens! : realTokenMap[node.id])
-    : estimateTokenCount(node.isDirectory ? (meta?.folderSize || 0) : node.sizeBytes);
+  const handleSetOutputMode = (targetPath: string, mode: 'full' | 'structure-only') => {
+    const wasTreeDisabled = !localFilters?.generateTree;
+    setNodeOutputMode(targetPath, mode);
+    if (mode === 'structure-only' && wasTreeDisabled) {
+      showToast('info', t('common.info'), t('structureOnly.autoEnabledTree'));
+    }
+    onClose();
+  };
 
-  const baseSize = node.isDirectory ? (meta?.folderSize || 0) : node.sizeBytes;
-  const optSize = node.isDirectory ? folderStat?.selectedOptimizedBytes : (optimizedBytesMap && optimizedBytesMap[node.id]);
-  const isOptimized = localFilters?.isOptimizationEnabled && optSize !== undefined && optSize < baseSize;
+  const handleClearOverride = (targetPath: string) => {
+    clearNodeOutputModeOverride(targetPath);
+    onClose();
+  };
+
+  const optActive =
+    (localFilters?.isOptimizationEnabled ?? false) &&
+    appliedOptimizationHash !== 'none';
+
+  const baseEntry = !node.isDirectory ? baseMetricsMap[node.id] : undefined;
+  const rawFileBytes = baseEntry?.bytes ?? node.sizeBytes;
+  const baseFileExact = baseEntry?.exactTokens ?? null;
+  const optEntry = !node.isDirectory ? optimizedMetricsMap[node.id] : undefined;
+  const hasValidOpt =
+    optActive &&
+    optEntry !== undefined &&
+    optEntry.configHash === appliedOptimizationHash;
+
+  const isExactTotal = node.isDirectory
+    ? (folderStat?.isSelectedActiveExact ?? false)
+    : (hasValidOpt ? optEntry.exactTokens !== null : baseFileExact !== null);
+
+  const tokensVal = node.isDirectory
+    ? (folderStat?.selectedActiveTokens ?? 0)
+    : (hasValidOpt
+        ? (optEntry.exactTokens ?? estimateTokenCount(optEntry.bytes))
+        : (baseFileExact ?? estimateTokenCount(rawFileBytes)));
+
+  const baseSize = node.isDirectory
+    ? (folderStat?.eligibleSizeBytes ?? meta?.folderSize ?? 0)
+    : rawFileBytes;
+
+  const selectedBaseSize = node.isDirectory
+    ? (folderStat?.selectedBaseBytes ?? 0)
+    : rawFileBytes;
+
+  const optSize = node.isDirectory
+    ? (folderStat?.selectedActiveBytes ?? 0)
+    : (hasValidOpt ? optEntry.bytes : rawFileBytes);
+
+  const isOptimized = node.isDirectory
+    ? (optActive && (folderStat?.optimizedFilesCount ?? 0) > 0 && optSize < selectedBaseSize)
+    : (hasValidOpt && isMeaningfullyOptimized(rawFileBytes, optSize, baseFileExact, optEntry?.exactTokens));
 
   return (
     <div className="context-menu-overlay" onContextMenu={(e) => { e.preventDefault(); onClose(); }} onClick={onClose}>
@@ -287,6 +342,60 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
               </>
             )}
 
+            {!node.isIgnored && (
+              <>
+                <div className="context-menu-divider" />
+                <div className="context-menu-section-title">{t('structureOnly.outputModeLabel')}</div>
+
+                {node.outputMode === 'full' ? (
+                  node.outputModeSource === 'direct' ? (
+                    <button
+                      className="context-menu-action action-structure-only"
+                      onClick={() => handleClearOverride(node.relativePath)}
+                    >
+                      <IconArrowBackUp size={18} />
+                      {t('structureOnly.resetOverrideAction')}
+                    </button>
+                  ) : (
+                    <button
+                      className="context-menu-action action-structure-only"
+                      onClick={() => handleSetOutputMode(node.relativePath, 'structure-only')}
+                    >
+                      <IconBinaryTree size={18} />
+                      {t('structureOnly.setAction')}
+                    </button>
+                  )
+                ) : node.outputModeSource === 'direct' ? (
+                  <button
+                    className="context-menu-action action-full-override"
+                    onClick={() => handleSetOutputMode(node.relativePath, 'full')}
+                  >
+                    <IconBinaryTree size={18} />
+                    {t('structureOnly.restoreAction')}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className="context-menu-action action-full-override"
+                      onClick={() => handleSetOutputMode(node.relativePath, 'full')}
+                    >
+                      <IconBinaryTree size={18} />
+                      {t('structureOnly.overrideFullAction')}
+                    </button>
+                    {node.outputModeAnchorPath && (
+                      <button
+                        className="context-menu-action"
+                        onClick={() => handleSetOutputMode(node.outputModeAnchorPath!, 'full')}
+                      >
+                        <IconArrowBackUp size={18} />
+                        {t('structureOnly.restoreAction')} ({node.outputModeAnchorPath.split('/').pop()})
+                      </button>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
             <div className="context-menu-divider" />
             <div className="context-menu-section-title">{t('browser.localFilters')}</div>
 
@@ -347,13 +456,47 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
               </div>
             </div>
 
+            <div className="meta-row">
+              <IconBinaryTree
+                size={16}
+                className="meta-icon"
+                style={{
+                  color:
+                    node.outputMode === 'structure-only'
+                      ? 'var(--structure-only)'
+                      : node.outputModeSource === 'direct'
+                        ? 'var(--accent-primary)'
+                        : undefined,
+                }}
+              />
+              <div className="meta-details">
+                <span className="meta-label">{t('structureOnly.outputModeLabel')}</span>
+                <span
+                  className="meta-value"
+                  style={{
+                    color:
+                      node.outputMode === 'structure-only'
+                        ? 'var(--structure-only)'
+                        : undefined,
+                    fontWeight: node.outputMode === 'structure-only' ? 600 : undefined,
+                  }}
+                >
+                  {node.outputMode === 'structure-only'
+                    ? node.outputModeSource === 'direct'
+                      ? t('structureOnly.modeMetaDirect')
+                      : `${t('structureOnly.modeMetaInherited')} (${node.outputModeAnchorPath})`
+                    : t('structureOnly.modeFull')}
+                </span>
+              </div>
+            </div>
+
             {isOptimized && (
               <div className="meta-row">
                 <IconWand size={16} className="meta-icon" style={{ color: 'var(--success)' }} />
                 <div className="meta-details">
                   <span className="meta-label" style={{ color: 'var(--success)' }}>{t('optimization.optimized', 'Optimized Size')}</span>
                   <span className="meta-value" style={{ color: 'var(--success)', fontWeight: 600 }}>
-                    {formatFileSize(optSize!)} (-{formatFileSize(baseSize - optSize!)})
+                    {formatFileSize(optSize)} (-{formatFileSize(selectedBaseSize - optSize)})
                   </span>
                 </div>
               </div>
@@ -364,7 +507,13 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
               <div className="meta-details">
                 <span className="meta-label">{t('stats.tokens')}</span>
                 <span className="meta-value">
-                  {node.isDirectory && isLoadingMeta ? <IconLoader2 size={12} className="spin" /> : `${!isExactTotal ? '~' : ''}${tokensVal.toLocaleString()}`}
+                  {node.isDirectory && isLoadingMeta ? (
+                    <IconLoader2 size={12} className="spin" />
+                  ) : node.outputMode === 'structure-only' ? (
+                    `0 body (~${(node.isDirectory ? (folderStat?.structureOnlySavedTokens ?? 0) : estimateTokenCount(rawFileBytes)).toLocaleString()} ${t('structureOnly.omittedFromBody')})`
+                  ) : (
+                    `${!isExactTotal ? '~' : ''}${tokensVal.toLocaleString()}`
+                  )}
                 </span>
               </div>
             </div>
@@ -375,7 +524,11 @@ export function FileContextMenu({ x, y, node, folderStat, onClose }: FileContext
                 <div className="meta-details">
                   <span className="meta-label">{t('browser.files')}</span>
                   <span className="meta-value">
-                    {folderStat ? `${folderStat.selected} / ${folderStat.total}` : '...'}
+                    {folderStat
+                      ? folderStat.structureOnlySelected > 0
+                        ? `${folderStat.selected} / ${folderStat.total} (${folderStat.structureOnlySelected} meta-only)`
+                        : `${folderStat.selected} / ${folderStat.total}`
+                      : '...'}
                   </span>
                 </div>
               </div>

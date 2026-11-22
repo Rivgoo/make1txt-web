@@ -63,6 +63,19 @@
   color: var(--success);
 }
 
+.stat-value.warning {
+  color: var(--warning);
+}
+
+.stat-subtext {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.stat-cyan {
+  color: var(--structure-only);
+}
+
 .generate-btn {
   background: linear-gradient(135deg, var(--accent-primary), #d95a00);
   border: none;

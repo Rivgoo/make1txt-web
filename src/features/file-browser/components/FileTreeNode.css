@@ -220,3 +220,124 @@
   align-items: center;
   opacity: 0.9;
 }
+
+.opt-warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+/* Structure-Only Hierarchical Row Visuals */
+.tree-node--meta-direct {
+  background-color: var(--structure-only-bg);
+  box-shadow: inset 2px 0 0 var(--structure-only);
+}
+
+.tree-node--meta-direct:hover {
+  background-color: rgba(56, 189, 248, 0.13);
+}
+
+.tree-node--meta-direct .tree-node-name--folder {
+  color: var(--structure-only);
+}
+
+.tree-node--meta-inherited {
+  background-color: var(--structure-only-bg-inherited);
+  box-shadow: inset 2px 0 0 var(--structure-only-border);
+}
+
+.tree-node--meta-inherited:hover {
+  background-color: rgba(56, 189, 248, 0.08);
+}
+
+.tree-node--full-override {
+  background-color: rgba(255, 122, 0, 0.06);
+  box-shadow: inset 2px 0 0 var(--accent-primary);
+}
+
+.tree-node--full-override:hover {
+  background-color: rgba(255, 122, 0, 0.11);
+}
+
+.tree-node--click-mark {
+  cursor: crosshair;
+}
+
+.structure-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  height: 15px;
+  border-radius: 3px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin-right: 6px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.structure-badge--meta {
+  background-color: rgba(56, 189, 248, 0.18);
+  border: 1px solid var(--structure-only-border);
+  color: var(--structure-only);
+}
+
+.structure-badge--inherited {
+  background-color: rgba(56, 189, 248, 0.08);
+  border: 1px dashed var(--structure-only-border);
+  color: var(--structure-only-muted);
+  font-weight: 600;
+}
+
+.structure-badge--full {
+  background-color: rgba(255, 122, 0, 0.16);
+  border: 1px solid rgba(255, 122, 0, 0.45);
+  color: var(--accent-primary);
+}
+
+.tree-node--ignored .structure-badge,
+.tree-node--unselected .structure-badge {
+  opacity: 0.5;
+}
+
+.structure-folder-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.72rem;
+  color: var(--structure-only);
+  font-weight: 600;
+  cursor: help;
+}
+
+.tree-node-action-btn.active-structure-only {
+  background-color: rgba(56, 189, 248, 0.18);
+  border-color: var(--structure-only);
+  color: var(--structure-only);
+}
+
+.tree-node-action-btn.inherited-structure-only {
+  background-color: rgba(56, 189, 248, 0.08);
+  border: 1px dashed var(--structure-only-border);
+  color: var(--structure-only-muted);
+}
+
+.tree-node-action-btn.override-full {
+  background-color: rgba(255, 122, 0, 0.15);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.structure-tokens-strikethrough {
+  text-decoration: line-through;
+  opacity: 0.5;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.structure-tokens-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--structure-only);
+  letter-spacing: 0.02em;
+}

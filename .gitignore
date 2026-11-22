@@ -232,3 +232,4 @@ sql
 [Ss]tyle[Cc]op.*
 ~$*
 ai.ps1
+/graphify-out

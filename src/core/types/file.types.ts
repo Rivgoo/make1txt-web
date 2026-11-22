@@ -5,6 +5,9 @@ export interface FileSystemHandle {
   readonly name: string;
 }
 
+export type OutputMode = 'full' | 'structure-only';
+export type OutputModeSource = 'default' | 'direct' | 'inherited';
+
 export interface FileNode {
   id: string;
   name: string;
@@ -20,6 +23,9 @@ export interface FileNode {
   isGloballyIgnored: boolean;
   isLocallyIgnored: boolean;
   isExpanded: boolean;
+  outputMode: OutputMode;
+  outputModeSource: OutputModeSource;
+  outputModeAnchorPath: string | null;
 }
 
 export interface IdeSyncPayload {
@@ -34,12 +40,17 @@ export interface IdeSyncPayload {
 export interface GeneratorStats {
   totalFiles: number;
   selectedFiles: number;
+  fullSelectedFiles: number;
+  structureOnlyFiles: number;
   totalSizeBytes: number;
   totalOptimizedBytes: number;
+  structureOnlySavedBytes: number;
   totalWords: number;
   baseTokens: number;
   tokens: number;
+  structureOnlySavedTokens: number;
   isExactTokens: boolean;
+  isBaseExactTokens: boolean;
 }
 
 export interface TreeSymbols {
@@ -48,6 +59,7 @@ export interface TreeSymbols {
   vertical: string;
   space: string;
   ignoredSuffix: string;
+  structureOnlySuffix: string;
 }
 
 export type SaveStrategy = 'default' | 'ask';
@@ -83,6 +95,7 @@ export interface ExtensionStat {
 export interface LocalFilters {
   extensions: Record<string, ExtensionStat>;
   customPatterns: CustomPattern[];
+  outputModeOverrides: Record<string, OutputMode>;
   showGloballyIgnored: boolean;
   showLocallyIgnored: boolean;
   showEmptyFolders: boolean;
@@ -97,6 +110,7 @@ export interface LocalFilters {
 export interface SavedLocalFilters {
   hiddenExtensions: string[];
   customPatterns: CustomPattern[];
+  outputModeOverrides?: Record<string, OutputMode>;
   showGloballyIgnored: boolean;
   showLocallyIgnored: boolean;
   showEmptyFolders: boolean;

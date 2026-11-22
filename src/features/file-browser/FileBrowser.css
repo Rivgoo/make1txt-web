@@ -341,3 +341,187 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Structure-Only Toolbar Button & Slide-Down Panel */
+.structure-toolbar-btn {
+  position: relative;
+}
+
+.structure-toolbar-btn.has-active {
+  border-color: var(--structure-only-border);
+  background-color: var(--structure-only-bg);
+}
+
+.structure-toolbar-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background-color: var(--structure-only);
+  color: #0b1116;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.structure-panel-wrapper {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--structure-only-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.structure-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.structure-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--structure-only);
+}
+
+.structure-panel-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.structure-panel-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: var(--spacing-xs) 0;
+}
+
+.structure-rules-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.structure-rule-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-root);
+  max-width: 100%;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.structure-rule-chip.is-meta {
+  border-color: var(--structure-only-border);
+  background-color: var(--structure-only-bg);
+}
+
+.structure-rule-chip.is-full {
+  border-color: rgba(255, 122, 0, 0.45);
+  background-color: rgba(255, 122, 0, 0.08);
+}
+
+.structure-rule-chip-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.structure-rule-chip.is-meta .structure-rule-chip-tag {
+  background-color: var(--structure-only);
+  color: #0b1116;
+}
+
+.structure-rule-chip.is-full .structure-rule-chip-tag {
+  background-color: var(--accent-primary);
+  color: #141414;
+}
+
+.structure-rule-chip-path {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.structure-rule-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.structure-rule-chip-remove:hover {
+  color: var(--danger);
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+.structure-panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding-top: 4px;
+  border-top: 1px solid var(--border-color);
+}
+
+.structure-click-mark-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-root);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.structure-click-mark-btn:hover {
+  border-color: var(--structure-only-border);
+  color: var(--text-primary);
+}
+
+.structure-click-mark-btn.active {
+  border-color: var(--structure-only);
+  background-color: var(--structure-only-bg);
+  color: var(--structure-only);
+}
+
+.structure-panel-impact {
+  font-size: 0.75rem;
+  color: var(--structure-only);
+  font-weight: 600;
+}

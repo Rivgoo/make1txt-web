@@ -89,6 +89,9 @@ export async function readDirectoryRecursively(
         isGloballyIgnored: false,
         isLocallyIgnored: false,
         isExpanded: false,
+        outputMode: 'full',
+        outputModeSource: 'default',
+        outputModeAnchorPath: null,
       });
 
       const children = await readDirectoryRecursively(
@@ -120,6 +123,9 @@ export async function readDirectoryRecursively(
         isGloballyIgnored: false,
         isLocallyIgnored: false,
         isExpanded: false,
+        outputMode: 'full',
+        outputModeSource: 'default',
+        outputModeAnchorPath: null,
       });
     }
   }

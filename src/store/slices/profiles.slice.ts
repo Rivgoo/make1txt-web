@@ -6,6 +6,7 @@ import { recompileAndRecalculate } from '../helpers/node.helper';
 import { saveGlobalSettings } from '../helpers/settings.helper';
 import { PREDEFINED_OPTIMIZATION_RULES } from '@/core/constants/optimization.constants';
 import { DEFAULT_GLOBAL_SETTINGS } from '../constants';
+import { computeOptimizationHash } from '@/core/utils/optimization.utils';
 
 export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice> = (set, get) => ({
   profiles: [],
@@ -35,6 +36,7 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
       localFilters: {
         hiddenExtensions,
         customPatterns: localFilters.customPatterns,
+        outputModeOverrides: localFilters.outputModeOverrides ?? {},
         showGloballyIgnored: localFilters.showGloballyIgnored,
         showLocallyIgnored: localFilters.showLocallyIgnored,
         showEmptyFolders: localFilters.showEmptyFolders,
@@ -80,18 +82,22 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
         
         const savedFilters = profile.localFilters;
         const mergedSettings = { ...DEFAULT_GLOBAL_SETTINGS, ...profile.settings };
+        const optEnabled = savedFilters.isOptimizationEnabled ?? false;
+        const optRules = savedFilters.optimizationRules ?? PREDEFINED_OPTIMIZATION_RULES;
 
         const newLocalFilters = {
           ...state.localFilters,
           extensions: newExts,
           customPatterns: savedFilters.customPatterns,
+          outputModeOverrides: savedFilters.outputModeOverrides ?? {},
           showGloballyIgnored: savedFilters.showGloballyIgnored ?? false,
           showLocallyIgnored: savedFilters.showLocallyIgnored ?? true,
           showEmptyFolders: savedFilters.showEmptyFolders ?? false,
           generateTree: savedFilters.generateTree ?? true,
           treeIncludeIgnored: savedFilters.treeIncludeIgnored ?? false,
-          isOptimizationEnabled: savedFilters.isOptimizationEnabled ?? false,
-          optimizationRules: savedFilters.optimizationRules ?? PREDEFINED_OPTIMIZATION_RULES,
+          isOptimizationEnabled: optEnabled,
+          isOptimizationDirty: false,
+          optimizationRules: optRules,
           enableCSharpAnalysis: savedFilters.enableCSharpAnalysis ?? true
         };
 
@@ -99,6 +105,7 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
         return {
           globalSettings: mergedSettings,
           localFilters: newLocalFilters,
+          appliedOptimizationHash: optEnabled ? computeOptimizationHash(true, optRules) : 'none',
           ...recompileAndRecalculate(tempState)
         };
       });
@@ -133,6 +140,7 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
     const currentSavedFilters = {
       hiddenExtensions,
       customPatterns: localFilters.customPatterns,
+      outputModeOverrides: localFilters.outputModeOverrides ?? {},
       showGloballyIgnored: localFilters.showGloballyIgnored,
       showLocallyIgnored: localFilters.showLocallyIgnored,
       showEmptyFolders: localFilters.showEmptyFolders,
@@ -143,8 +151,13 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
       enableCSharpAnalysis: localFilters.enableCSharpAnalysis
     };
 
+    const snapshotFilters = {
+      ...activeProfileSnapshot.localFilters,
+      outputModeOverrides: activeProfileSnapshot.localFilters.outputModeOverrides ?? {},
+    };
+
     const isSettingsChanged = JSON.stringify(globalSettings) !== JSON.stringify(activeProfileSnapshot.settings);
-    const isFiltersChanged = JSON.stringify(currentSavedFilters) !== JSON.stringify(activeProfileSnapshot.localFilters);
+    const isFiltersChanged = JSON.stringify(currentSavedFilters) !== JSON.stringify(snapshotFilters);
 
     set({ hasUnsavedProfileChanges: isSettingsChanged || isFiltersChanged });
   },
@@ -164,6 +177,7 @@ export const createProfilesSlice: StateCreator<FileStore, [], [], ProfilesSlice>
       localFilters: {
         hiddenExtensions,
         customPatterns: localFilters.customPatterns,
+        outputModeOverrides: localFilters.outputModeOverrides ?? {},
         showGloballyIgnored: localFilters.showGloballyIgnored,
         showLocallyIgnored: localFilters.showLocallyIgnored,
         showEmptyFolders: localFilters.showEmptyFolders,

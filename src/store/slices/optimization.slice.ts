@@ -1,32 +1,53 @@
 import type { StateCreator } from 'zustand';
 import type { FileStore, OptimizationSlice } from '../store.types';
 import { PREDEFINED_OPTIMIZATION_RULES } from '@/core/constants/optimization.constants';
+import { computeOptimizationHash } from '@/core/utils/optimization.utils';
 
 export const createOptimizationSlice: StateCreator<FileStore, [], [], OptimizationSlice> = (set, get) => ({
-  
   toggleOptimization: (isEnabled) => {
-    set((state) => ({
-      localFilters: { 
-        ...state.localFilters, 
-        isOptimizationEnabled: isEnabled,
-        isOptimizationDirty: true,
-        optimizationRules: state.localFilters.optimizationRules || PREDEFINED_OPTIMIZATION_RULES
+    set((state) => {
+      const rules = state.localFilters.optimizationRules || PREDEFINED_OPTIMIZATION_RULES;
+      if (!isEnabled) {
+        return {
+          appliedOptimizationHash: 'none',
+          localFilters: {
+            ...state.localFilters,
+            isOptimizationEnabled: false,
+            isOptimizationDirty: false,
+            optimizationRules: rules,
+          },
+        };
       }
-    }));
+      const pendingHash = computeOptimizationHash(true, rules);
+      return {
+        localFilters: {
+          ...state.localFilters,
+          isOptimizationEnabled: true,
+          isOptimizationDirty: pendingHash !== state.appliedOptimizationHash,
+          optimizationRules: rules,
+        },
+      };
+    });
   },
 
   toggleOptimizationRule: (id) => {
     set((state) => {
       const currentRules = state.localFilters.optimizationRules || PREDEFINED_OPTIMIZATION_RULES;
-      const newRules = currentRules.map(rule => 
+      const newRules = currentRules.map((rule) =>
         rule.id === id ? { ...rule, isActive: !rule.isActive } : rule
       );
-      return { 
-        localFilters: { 
-          ...state.localFilters, 
+      const pendingHash = computeOptimizationHash(
+        state.localFilters.isOptimizationEnabled,
+        newRules
+      );
+      return {
+        localFilters: {
+          ...state.localFilters,
           optimizationRules: newRules,
-          isOptimizationDirty: true 
-        } 
+          isOptimizationDirty: state.localFilters.isOptimizationEnabled
+            ? pendingHash !== state.appliedOptimizationHash
+            : false,
+        },
       };
     });
   },
@@ -35,12 +56,19 @@ export const createOptimizationSlice: StateCreator<FileStore, [], [], Optimizati
     set((state) => {
       const currentRules = state.localFilters.optimizationRules || PREDEFINED_OPTIMIZATION_RULES;
       const newRule = { ...ruleData, id: crypto.randomUUID(), isPredefined: false };
-      return { 
-        localFilters: { 
-          ...state.localFilters, 
-          optimizationRules: [...currentRules, newRule],
-          isOptimizationDirty: true 
-        } 
+      const newRules = [...currentRules, newRule];
+      const pendingHash = computeOptimizationHash(
+        state.localFilters.isOptimizationEnabled,
+        newRules
+      );
+      return {
+        localFilters: {
+          ...state.localFilters,
+          optimizationRules: newRules,
+          isOptimizationDirty: state.localFilters.isOptimizationEnabled
+            ? pendingHash !== state.appliedOptimizationHash
+            : false,
+        },
       };
     });
   },
@@ -48,13 +76,19 @@ export const createOptimizationSlice: StateCreator<FileStore, [], [], Optimizati
   removeCustomOptimizationRule: (id) => {
     set((state) => {
       const currentRules = state.localFilters.optimizationRules || PREDEFINED_OPTIMIZATION_RULES;
-      const newRules = currentRules.filter(rule => rule.id !== id);
-      return { 
-        localFilters: { 
-          ...state.localFilters, 
+      const newRules = currentRules.filter((rule) => rule.id !== id);
+      const pendingHash = computeOptimizationHash(
+        state.localFilters.isOptimizationEnabled,
+        newRules
+      );
+      return {
+        localFilters: {
+          ...state.localFilters,
           optimizationRules: newRules,
-          isOptimizationDirty: true 
-        } 
+          isOptimizationDirty: state.localFilters.isOptimizationEnabled
+            ? pendingHash !== state.appliedOptimizationHash
+            : false,
+        },
       };
     });
   },
@@ -62,27 +96,38 @@ export const createOptimizationSlice: StateCreator<FileStore, [], [], Optimizati
   updateCustomOptimizationRule: (id, updates) => {
     set((state) => {
       const currentRules = state.localFilters.optimizationRules || PREDEFINED_OPTIMIZATION_RULES;
-      const newRules = currentRules.map(rule => 
+      const newRules = currentRules.map((rule) =>
         rule.id === id ? { ...rule, ...updates } : rule
       );
-      return { 
-        localFilters: { 
-          ...state.localFilters, 
+      const pendingHash = computeOptimizationHash(
+        state.localFilters.isOptimizationEnabled,
+        newRules
+      );
+      return {
+        localFilters: {
+          ...state.localFilters,
           optimizationRules: newRules,
-          isOptimizationDirty: true 
-        } 
+          isOptimizationDirty: state.localFilters.isOptimizationEnabled
+            ? pendingHash !== state.appliedOptimizationHash
+            : false,
+        },
       };
     });
   },
 
   applyOptimization: () => {
-    get().invalidateTokens();
+    const { localFilters, needsManualTokenization } = get();
+    const rules = localFilters.optimizationRules || PREDEFINED_OPTIMIZATION_RULES;
+    const newHash = computeOptimizationHash(localFilters.isOptimizationEnabled, rules);
+
     set((state) => ({
+      appliedOptimizationHash: newHash,
       localFilters: {
         ...state.localFilters,
-        isOptimizationDirty: false
-      }
+        isOptimizationDirty: false,
+      },
     }));
-    get().runTokenization(true);
-  }
+
+    get().runTokenization(!needsManualTokenization, true);
+  },
 });

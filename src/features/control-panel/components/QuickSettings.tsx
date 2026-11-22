@@ -4,7 +4,7 @@ import {
   IconFileCode, IconFilter, 
   IconPlus, IconTrash, IconArrowUp, IconArrowDown, IconEyeOff, IconPencil,
   IconChecks, IconSquareX, IconEye, IconBinaryTree, IconWorld, IconMapPin, IconFolderOff, IconAlertCircle, IconLoader2,
-  IconWand, IconChevronDown, IconChevronRight, IconRegex, IconCode
+  IconWand, IconChevronDown, IconChevronRight, IconRegex, IconCode, IconCpu
 } from '@tabler/icons-react';
 import { Button } from '@/shared/ui/Button/Button';
 import { useFileStore } from '@/store/useFileStore';
@@ -17,7 +17,7 @@ export function QuickSettings() {
   const { 
     nodes, localFilters, updateLocalFilters, toggleExtension, setAllExtensionsState, 
     addCustomPattern, updateCustomPattern, toggleCustomPattern, removeCustomPattern, moveCustomPattern,
-    globalSettings, needsManualTokenization, isTokenizing, runTokenization,
+    globalSettings, needsManualTokenization, isTokenizing, tokenizationProgress, runTokenization, cancelTokenization, invalidateAllMetrics, getStats,
     toggleOptimization, toggleOptimizationRule, addCustomOptimizationRule, removeCustomOptimizationRule, applyOptimization
   } = useFileStore();
   
@@ -88,6 +88,11 @@ export function QuickSettings() {
   const customRules = optRules.filter(r => !r.isPredefined);
   const customPatterns = localFilters?.customPatterns || [];
 
+  const stats = getStats();
+  const structureOnlyFolderCount = Object.values(
+    localFilters?.outputModeOverrides ?? {}
+  ).filter((m) => m === 'structure-only').length;
+
   return (
     <div className="quick-settings">
 
@@ -96,12 +101,20 @@ export function QuickSettings() {
           <div className="qs-header">
             <span className="qs-title" style={{ color: 'var(--success)' }}>
               <IconLoader2 size={16} className="spin" />
-              {t('quickSettings.tokenCalcTitle')}
+              {t('quickSettings.tokenCalcTitle')} ({tokenizationProgress}%)
             </span>
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
             {t('quickSettings.tokenCalcDesc')}
           </p>
+          <Button
+            variant="danger"
+            onClick={cancelTokenization}
+            style={{ marginTop: 'var(--spacing-xs)', alignSelf: 'flex-start' }}
+          >
+            <IconSquareX size={16} />
+            {t('common.cancel')}
+          </Button>
         </div>
       ) : needsManualTokenization ? (
         <div className="qs-section" style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', borderColor: 'var(--warning)' }}>
@@ -345,6 +358,35 @@ export function QuickSettings() {
           <span className="qs-title"><IconEye size={16}/> {t('quickSettings.structureIncludeIgnored')}</span>
           <div className="toggle-switch" />
         </div>
+
+        {(structureOnlyFolderCount > 0 || stats.structureOnlyFiles > 0) && (
+          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 'var(--spacing-xs)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--structure-only)' }}>
+              <IconBinaryTree size={14} />
+              <span>
+                {t('structureOnly.activeBanner', {
+                  folders: structureOnlyFolderCount,
+                  files: stats.structureOnlyFiles,
+                })}
+              </span>
+            </div>
+            {!localFilters?.generateTree && (
+              <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid var(--warning)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--warning)', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                  <IconAlertCircle size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  {t('structureOnly.treeDisabledWarning', { count: stats.structureOnlyFiles })}
+                </span>
+                <Button
+                  variant="secondary"
+                  onClick={() => updateLocalFilters({ generateTree: true })}
+                  style={{ alignSelf: 'flex-start', padding: '2px 8px', fontSize: '0.72rem', borderColor: 'var(--warning)', color: 'var(--warning)' }}
+                >
+                  {t('structureOnly.reEnableStructure')}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       <div className="qs-section">
@@ -361,6 +403,34 @@ export function QuickSettings() {
           <div className="toggle-switch" />
         </div>
       </div>
+
+      <Button
+        variant="secondary"
+        isFullWidth
+        disabled={stats.fullSelectedFiles === 0}
+        onClick={() => {
+          if (isTokenizing) {
+            cancelTokenization();
+            return;
+          }
+          if (stats.isExactTokens && stats.isBaseExactTokens) {
+            invalidateAllMetrics();
+          }
+          runTokenization(true, true);
+        }}
+      >
+        {isTokenizing ? (
+          <>
+            <IconSquareX size={16} />
+            {t('common.cancel')} ({tokenizationProgress}%)
+          </>
+        ) : (
+          <>
+            <IconCpu size={16} />
+            {t('quickSettings.calculateExact')}
+          </>
+        )}
+      </Button>
 
     </div>
   );

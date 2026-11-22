@@ -40,3 +40,20 @@ export function hasMeaningfulOptimization(original: number, optimized: number): 
   const saved = original - optimized;
   return (saved / original) > 0.01;
 }
+
+/**
+ * Checks if optimization produced a meaningful reduction in either bytes (>1%) or tokens (>=10).
+ */
+export function isMeaningfullyOptimized(
+  baseBytes: number,
+  optBytes: number,
+  baseTokens?: number | null,
+  optTokens?: number | null
+): boolean {
+  const byteSaved = baseBytes > 0 && (baseBytes - optBytes) / baseBytes > 0.01;
+  const tokenSaved =
+    baseTokens != null &&
+    optTokens != null &&
+    baseTokens - optTokens >= 10;
+  return byteSaved || tokenSaved;
+}

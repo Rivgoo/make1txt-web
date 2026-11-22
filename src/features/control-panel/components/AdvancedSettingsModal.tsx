@@ -22,7 +22,7 @@ const MOCK_TREE_NODES: Partial<FileNode>[] = [
   { id: '3', name: 'index.ts', isDirectory: false, isIgnored: false, parentId: '2', handle: fakeHandle },
   { id: '4', name: 'components', isDirectory: true, isIgnored: false, parentId: '2', handle: fakeHandle },
   { id: '5', name: 'Button.tsx', isDirectory: false, isIgnored: false, parentId: '4', handle: fakeHandle },
-  { id: '6', name: 'utils', isDirectory: true, isIgnored: false, parentId: '4', handle: fakeHandle },
+  { id: '6', name: 'utils', isDirectory: true, isIgnored: false, parentId: '4', handle: fakeHandle, outputMode: 'structure-only', outputModeSource: 'direct' },
   { id: '7', name: 'helpers', isDirectory: true, isIgnored: false, parentId: '6', handle: fakeHandle },
   { id: '8', name: 'math.ts', isDirectory: false, isIgnored: false, parentId: '7', handle: fakeHandle },
   { id: '9', name: 'deep', isDirectory: true, isIgnored: false, parentId: '7', handle: fakeHandle },
@@ -53,8 +53,8 @@ export function AdvancedSettingsModal({ isOpen, onClose }: Props) {
 
   const TREE_PRESETS = [
     { name: 'ASCII', symbols: DEFAULT_TREE_SYMBOLS },
-    { name: 'Simple', symbols: { branch: '|- ', last: '`- ', vertical: '|  ', space: '   ', ignoredSuffix: ' (ignored)' } },
-    { name: 'Indent', symbols: { branch: '  ', last: '  ', vertical: '  ', space: '  ', ignoredSuffix: ' (ignored)' } }
+    { name: 'Simple', symbols: { branch: '|- ', last: '`- ', vertical: '|  ', space: '   ', ignoredSuffix: ' (ignored)', structureOnlySuffix: ' (structure-only)' } },
+    { name: 'Indent', symbols: { branch: '  ', last: '  ', vertical: '  ', space: '  ', ignoredSuffix: ' (ignored)', structureOnlySuffix: ' (structure-only)' } }
   ];
 
   if (isOpen !== prevIsOpen) {
@@ -304,9 +304,15 @@ export function AdvancedSettingsModal({ isOpen, onClose }: Props) {
                     <input className="as-input" value={local.treeSymbols?.space || ''} onChange={e => setLocal({...local, treeSymbols: {...local.treeSymbols, space: e.target.value}})} />
                   </div>
                 </div>
-                <div className="as-tree-symbol-item" style={{ marginTop: 'var(--spacing-xs)' }}>
-                  <label>{t('settings.labels.ignoredMark')}</label>
-                  <input className="as-input" value={local.treeSymbols?.ignoredSuffix || ''} onChange={e => setLocal({...local, treeSymbols: {...local.treeSymbols, ignoredSuffix: e.target.value}})} />
+                <div className="as-tree-symbols-grid" style={{ marginTop: 'var(--spacing-xs)' }}>
+                  <div className="as-tree-symbol-item">
+                    <label>{t('settings.labels.ignoredMark')}</label>
+                    <input className="as-input" value={local.treeSymbols?.ignoredSuffix || ''} onChange={e => setLocal({...local, treeSymbols: {...local.treeSymbols, ignoredSuffix: e.target.value}})} />
+                  </div>
+                  <div className="as-tree-symbol-item">
+                    <label>{t('settings.labels.structureOnlyMark')}</label>
+                    <input className="as-input" value={local.treeSymbols?.structureOnlySuffix ?? ' (structure-only)'} onChange={e => setLocal({...local, treeSymbols: {...local.treeSymbols, structureOnlySuffix: e.target.value}})} />
+                  </div>
                 </div>
               </div>
             </div>

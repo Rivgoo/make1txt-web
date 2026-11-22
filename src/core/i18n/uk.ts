@@ -136,6 +136,7 @@ export const uk = {
       vertical: 'Стіна',
       space: 'Пробіл',
       ignoredMark: 'Позначка ігнорованих',
+      structureOnlyMark: 'Позначка «Лише структура»',
       structureWrapper: 'Шаблон обгортки (використовуйте {{tree}})',
       previewStructure: 'Прев\'ю структури:',
       fileDelimiterFormat: 'Стиль розділювача файлів',
@@ -192,6 +193,7 @@ export const uk = {
     showLocallyIgnored: 'Показати локально ігноровані',
     showEmptyFolders: 'Показати порожні папки',
     generateTree: 'Генерувати структуру файлів',
+    generateStructure: 'Генерувати структуру файлів',
     structureIncludeIgnored: 'Структура: включати ігноровані',
     enableCSharpAnalysis: 'C# Мета-аналіз',
     tokenWarningTitle: 'Знайдено великий проект',
@@ -251,5 +253,36 @@ export const uk = {
     errorDesc: 'Не вдалося отримати дані з IDE. Можливо, сервер вимкнувся або токен невірний.',
     goHome: 'На головну',
     successMessage: 'Робочий простір успішно синхронізовано.'
+  },
+  preview: {
+    original: 'Оригінал',
+    optimized: 'Оптимізований'
+  },
+  structureOnly: {
+    title: 'Режим «Лише структура та мета»',
+    toolbarTooltip: 'Керування папками «Лише структура»',
+    desc: 'Позначені папки проходять C# мета-аналіз і потрапляють у структуру, але текст файлів не включається для економії токенів.',
+    badgeMeta: 'МЕТА',
+    badgeTree: 'ДЕРЕВО',
+    badgeFullOverride: 'ПОВНИЙ',
+    setAction: 'Лише структура + мета',
+    restoreAction: 'Повернути повний вміст',
+    overrideFullAction: 'Виняток: включити повний текст',
+    resetOverrideAction: 'Скинути виняток (успадкувати мета)',
+    inheritedFrom: 'Успадковано від {{path}}',
+    clickToMark: 'Швидке позначення папок кліком',
+    clearAll: 'Скинути все',
+    emptyRules: 'Немає папок у режимі «Лише структура». Натисніть іконку дерева на будь-якій папці, щоб зменшити токени.',
+    autoEnabledTree: 'Генерацію структури автоматично увімкнено для папок у режимі «Лише структура».',
+    treeDisabledWarning: '{{count}} файлів у режимі «Лише структура» не потраплять у файл, доки вимкнено генерацію структури.',
+    reEnableStructure: 'Увімкнути структуру',
+    outputModeLabel: 'Режим виводу',
+    modeFull: 'Повний вміст',
+    modeMetaDirect: 'Лише структура + мета (Пряме правило)',
+    modeMetaInherited: 'Лише структура + мета (Успадковано)',
+    savedViaMeta: 'Заощаджено (Лише структура)',
+    activeBanner: '{{folders}} папок у режимі «Лише структура» ({{files}} файлів)',
+    omittedFromBody: 'вилучено з тексту',
+    tokensOmittedTooltip: '{{count}} токенів заощаджено через «Лише структура»'
   }
 };

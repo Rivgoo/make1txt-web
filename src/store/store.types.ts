@@ -1,16 +1,26 @@
 import type { 
-  FileNode, GeneratorStats, Profile, GlobalSettings, LocalFilters, SubtreeSyncResult 
+  FileNode, GeneratorStats, Profile, GlobalSettings, LocalFilters, SubtreeSyncResult, OutputMode 
 } from '@/core/types/file.types';
 import type { OptimizationRule } from '@/core/types/optimization.types';
+import type { BaseFileMetrics, OptimizedFileMetrics } from '@/core/types/worker.types';
 
 export interface FolderStat {
   total: number;
   selected: number;
+  fullSelected: number;
+  structureOnlySelected: number;
   absoluteTotal: number;
-  sizeBytes: number;
-  selectedSizeBytes: number;
-  selectedOptimizedBytes: number;
-  exactTokens?: number;
+  eligibleSizeBytes: number;
+  selectedBaseBytes: number;
+  selectedActiveBytes: number;
+  structureOnlySavedBytes: number;
+  totalEligibleTokens: number;
+  isTotalEligibleExact: boolean;
+  selectedBaseTokens: number;
+  isSelectedBaseExact: boolean;
+  selectedActiveTokens: number;
+  isSelectedActiveExact: boolean;
+  structureOnlySavedTokens: number;
   optimizedFilesCount: number;
 }
 
@@ -60,6 +70,10 @@ export interface FiltersSlice {
   removeCustomPattern: (id: string) => void;
   moveCustomPattern: (id: string, direction: 'up' | 'down') => void;
   toggleLocalPathIgnore: (path: string) => void;
+  setNodeOutputMode: (relativePath: string, mode: OutputMode) => void;
+  toggleNodeOutputMode: (nodeId: string) => void;
+  clearNodeOutputModeOverride: (relativePath: string) => void;
+  clearAllOutputModeOverrides: () => void;
 }
 
 export interface SelectionSlice {
@@ -72,17 +86,21 @@ export interface SelectionSlice {
 }
 
 export interface TokenizationSlice {
-  realTokenMap: Record<string, number>;
-  optimizedBytesMap: Record<string, number>;
+  baseMetricsMap: Record<string, BaseFileMetrics>;
+  optimizedMetricsMap: Record<string, OptimizedFileMetrics>;
+  appliedOptimizationHash: string;
   isTokenizing: boolean;
   tokenizationProgress: number;
   needsManualTokenization: boolean;
   tokenizerWorker: Worker | null;
+  tokenizationRunId: number;
+  pendingReevaluate: boolean;
 
   evaluateTokenization: () => void;
-  runTokenization: (force: boolean) => void;
+  runTokenization: (forceExact: boolean, preempt?: boolean) => void;
   cancelTokenization: () => void;
-  invalidateTokens: () => void;
+  invalidateOptimizedMetrics: () => void;
+  invalidateAllMetrics: () => void;
   pruneAndInvalidateTokens: (deletedNodeIds: Set<string>, dirtyNodeIds: Set<string>) => void;
 }
 
