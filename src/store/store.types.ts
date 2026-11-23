@@ -14,6 +14,8 @@ export interface FolderStat {
   fullSelected: number;
   structureOnlySelected: number;
   absoluteTotal: number;
+  absoluteSizeBytes: number;
+  absoluteTokens: number;
   eligibleSizeBytes: number;
   selectedBaseBytes: number;
   selectedActiveBytes: number;

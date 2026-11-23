@@ -291,6 +291,8 @@ export function FileBrowser() {
           fullSelected: 0,
           structureOnlySelected: 0,
           absoluteTotal: 0,
+          absoluteSizeBytes: 0,
+          absoluteTokens: 0,
           eligibleSizeBytes: 0,
           selectedBaseBytes: 0,
           selectedActiveBytes: 0,
@@ -354,6 +356,8 @@ export function FileBrowser() {
         const s = stats[dirNode.relativePath];
         if (s) {
           s.absoluteTotal += 1;
+          s.absoluteSizeBytes += rawBytes;
+          s.absoluteTokens += fileBaseTokens;
           if (!node.isIgnored) {
             s.total += 1;
             if (isCs) {
@@ -461,48 +465,12 @@ export function FileBrowser() {
       }
     }
 
-    const isRegexActive =
-      (localFilters?.isOptimizationEnabled ?? false) &&
-      appliedOptimizationHash !== 'none';
-    const isCSharpEnabled = localFilters?.isCSharpCompressionEnabled ?? false;
-    const csOptions =
-      localFilters?.csharpCompressionOptions ?? DEFAULT_CSHARP_COMPRESSION_OPTIONS;
-
-    const getFileTokens = (n: FileNode): [number, number] => {
+    const getBaselineFileTokens = (n: FileNode): number => {
       const baseEntry = baseMetricsMap[n.id];
       const rawBytes = baseEntry?.bytes ?? n.sizeBytes;
-      const baseTok =
-        baseEntry?.exactTokens != null
-          ? baseEntry.exactTokens
-          : estimateTokenCount(rawBytes);
-
-      if (n.isIgnored || !n.isSelected) {
-        return [0, baseTok];
-      }
-
-      // Preserve position in hierarchy when marked structure-only
-      if (n.outputMode === 'structure-only') {
-        return [baseTok, baseTok];
-      }
-
-      const effHash = computeFileEffectiveConfigHash(
-        n.relativePath,
-        isRegexActive,
-        appliedOptimizationRules,
-        isCSharpEnabled,
-        n.csharpCompressionLevel,
-        csOptions
-      );
-      const optEntry = optimizedMetricsMap[n.id];
-      const hasValidOpt =
-        effHash !== 'none' &&
-        optEntry !== undefined &&
-        optEntry.configHash === effHash;
-      const activeTok = hasValidOpt
-        ? (optEntry.exactTokens ?? estimateTokenCount(optEntry.bytes))
-        : baseTok;
-
-      return [activeTok, baseTok];
+      return baseEntry?.exactTokens != null
+        ? baseEntry.exactTokens
+        : estimateTokenCount(rawBytes);
     };
 
     for (const children of childrenMap.values()) {
@@ -529,29 +497,20 @@ export function FileBrowser() {
         if (sortBy === 'name') {
           result = a.name.localeCompare(b.name);
         } else if (sortBy === 'tokens') {
-          const [primA, tieA] = a.isDirectory
-            ? [
-                (folderStats[a.relativePath]?.selectedActiveTokens ?? 0) +
-                  (folderStats[a.relativePath]?.structureOnlySavedTokens ?? 0),
-                folderStats[a.relativePath]?.totalEligibleTokens ?? 0,
-              ]
-            : getFileTokens(a);
-          const [primB, tieB] = b.isDirectory
-            ? [
-                (folderStats[b.relativePath]?.selectedActiveTokens ?? 0) +
-                  (folderStats[b.relativePath]?.structureOnlySavedTokens ?? 0),
-                folderStats[b.relativePath]?.totalEligibleTokens ?? 0,
-              ]
-            : getFileTokens(b);
-          result = primA - primB;
-          if (result === 0) result = tieA - tieB;
+          const valA = a.isDirectory
+            ? (folderStats[a.relativePath]?.absoluteTokens ?? 0)
+            : getBaselineFileTokens(a);
+          const valB = b.isDirectory
+            ? (folderStats[b.relativePath]?.absoluteTokens ?? 0)
+            : getBaselineFileTokens(b);
+          result = valA - valB;
           if (result === 0) result = a.name.localeCompare(b.name);
         } else {
           const valA = a.isDirectory
-            ? (folderStats[a.relativePath]?.eligibleSizeBytes || 0)
+            ? (folderStats[a.relativePath]?.absoluteSizeBytes ?? 0)
             : a.sizeBytes;
           const valB = b.isDirectory
-            ? (folderStats[b.relativePath]?.eligibleSizeBytes || 0)
+            ? (folderStats[b.relativePath]?.absoluteSizeBytes ?? 0)
             : b.sizeBytes;
           result = valA - valB;
           if (result === 0) result = a.name.localeCompare(b.name);
@@ -582,7 +541,7 @@ export function FileBrowser() {
     traverse(null);
     return result;
 
-  }, [nodes, searchTerm, localFilters?.showGloballyIgnored, localFilters?.showLocallyIgnored, localFilters?.showEmptyFolders, localFilters?.isOptimizationEnabled, localFilters?.isCSharpCompressionEnabled, localFilters?.csharpCompressionOptions, sortBy, sortDir, sortFolders, sortRegex, folderStats, baseMetricsMap, optimizedMetricsMap, appliedOptimizationHash, appliedOptimizationRules]);
+  }, [nodes, searchTerm, localFilters?.showGloballyIgnored, localFilters?.showLocallyIgnored, localFilters?.showEmptyFolders, sortBy, sortDir, sortFolders, sortRegex, folderStats, baseMetricsMap]);
 
   const outputModeOverrides = localFilters?.outputModeOverrides ?? {};
   const overrideEntries = Object.entries(outputModeOverrides);
